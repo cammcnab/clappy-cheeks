@@ -17,10 +17,11 @@ let lastFrameTime = 0
 // Load images
 const cheeksImage = new Image()
 const armImage = new Image()
+const bgImage = new Image()
 
 // Track loaded images
 let loadedImages = 0
-const totalImages = 2
+const totalImages = 3
 
 function handleImageLoad() {
 	loadedImages++
@@ -32,9 +33,11 @@ function handleImageLoad() {
 // Set up image loading
 cheeksImage.onload = handleImageLoad
 armImage.onload = handleImageLoad
+bgImage.onload = handleImageLoad
 
 cheeksImage.src = 'images/cheeks.png'
 armImage.src = 'images/arm.png'
+bgImage.src = 'images/bg.png'
 
 // Add these constants after the game state variables
 const GRAVITY = 0.7
@@ -52,13 +55,14 @@ const gameAudio = {
 	boo: new Audio('audio/booing.wav'),
 }
 
-// Set cheer volume lower and make it loop
-gameAudio.cheer.volume = 0.3
+// Set cheer volume much lower and make it loop
+gameAudio.cheer.volume = 0.1
 gameAudio.cheer.loop = true
 
 // Load clap sounds
 for (let i = 1; i <= 9; i++) {
 	const sound = new Audio(`audio/claps/clap${i}.wav`)
+	sound.preload = 'auto'
 	clapSounds.push(sound)
 }
 
@@ -66,13 +70,24 @@ let currentClapSound = 0
 
 // Add sound functions
 function playFlapSound() {
+	clapSounds[currentClapSound].pause()
 	clapSounds[currentClapSound].currentTime = 0
-	clapSounds[currentClapSound].play()
+
+	try {
+		clapSounds[currentClapSound]
+			.play()
+			.catch((e) => console.log('Sound play failed:', e))
+	} catch (e) {
+		console.log('Sound play error:', e)
+	}
+
 	currentClapSound = (currentClapSound + 1) % clapSounds.length
 }
 
 function playCheerSound() {
-	gameAudio.cheer.currentTime = 0
+	if (gameAudio.cheer.currentTime === 0 || !gameAudio.cheer.paused) {
+		gameAudio.cheer.currentTime = 0
+	}
 	gameAudio.cheer.play()
 }
 
@@ -196,91 +211,36 @@ const gloves = {
 }
 
 function drawBackground() {
-	// Dark background base
+	// Clear to black first
 	ctx.fillStyle = '#000000'
 	ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-	// Crowd section (top third)
-	const crowdHeight = canvas.height / 3
+	// Draw background image at low opacity with cover fill
+	ctx.globalAlpha = 0.3
 
-	// Crowd gradient background
-	const crowdGradient = ctx.createLinearGradient(0, 0, 0, crowdHeight)
-	crowdGradient.addColorStop(0, '#000022')
-	crowdGradient.addColorStop(1, '#000044')
-	ctx.fillStyle = crowdGradient
-	ctx.fillRect(0, 0, canvas.width, crowdHeight)
+	// Calculate dimensions to maintain aspect ratio and cover
+	const imgRatio = bgImage.width / bgImage.height
+	const canvasRatio = canvas.width / canvas.height
 
-	// Crowd dots (more like Punch-Out!!)
-	ctx.fillStyle = 'rgba(255, 255, 255, 0.1)'
-	for (let row = 0; row < 12; row++) {
-		for (let col = 0; col < canvas.width / 8; col++) {
-			if ((row + col) % 2 === 0) {
-				ctx.fillRect(col * 8, row * 8, 4, 4)
-			}
-		}
+	let drawWidth = canvas.width
+	let drawHeight = canvas.height
+	let x = 0
+	let y = 0
+
+	if (canvasRatio > imgRatio) {
+		// Canvas is wider than image ratio
+		drawWidth = canvas.width
+		drawHeight = drawWidth / imgRatio
+		y = (canvas.height - drawHeight) / 2
+	} else {
+		// Canvas is taller than image ratio
+		drawHeight = canvas.height
+		drawWidth = drawHeight * imgRatio
+		x = (canvas.width - drawWidth) / 2
 	}
 
-	// Ring floor (darker green like original)
-	ctx.fillStyle = '#003300'
-	ctx.fillRect(0, crowdHeight, canvas.width, canvas.height - crowdHeight)
-
-	// Ring mat pattern (more authentic)
-	ctx.strokeStyle = '#004400'
-	ctx.lineWidth = 2
-	const matSize = 40
-	for (let x = 0; x < canvas.width; x += matSize) {
-		for (let y = crowdHeight; y < canvas.height; y += matSize) {
-			ctx.strokeRect(x, y, matSize, matSize)
-		}
-	}
-
-	// Ring ropes (thicker, more prominent)
-	const ropePositions = [crowdHeight, crowdHeight + 40, crowdHeight + 80]
-
-	ropePositions.forEach((y) => {
-		// Rope shadow
-		ctx.strokeStyle = '#002200'
-		ctx.lineWidth = 8
-		ctx.beginPath()
-		ctx.moveTo(0, y + 4)
-		ctx.lineTo(canvas.width, y + 4)
-		ctx.stroke()
-
-		// Main rope
-		ctx.strokeStyle = '#FFFFFF'
-		ctx.lineWidth = 8
-		ctx.beginPath()
-		ctx.moveTo(0, y)
-		ctx.lineTo(canvas.width, y)
-		ctx.stroke()
-	})
-
-	// Ring posts (taller and more defined)
-	const postWidth = 30
-	const postHeight = 160
-
-	function drawPost(x, shadow = false) {
-		// Post gradient
-		const postGradient = ctx.createLinearGradient(x, 0, x + postWidth, 0)
-		postGradient.addColorStop(0, shadow ? '#880000' : '#CC0000')
-		postGradient.addColorStop(1, shadow ? '#AA0000' : '#FF0000')
-
-		ctx.fillStyle = postGradient
-		ctx.fillRect(x, crowdHeight - postHeight, postWidth, postHeight)
-
-		// Post highlight
-		ctx.fillStyle = shadow ? '#660000' : '#FF2222'
-		ctx.fillRect(
-			x + (shadow ? 0 : postWidth - 6),
-			crowdHeight - postHeight,
-			6,
-			postHeight
-		)
-	}
-
-	// Draw posts
-	drawPost(0, true) // Left post with shadow
-	drawPost(canvas.width - postWidth) // Right post
+	ctx.drawImage(bgImage, x, y, drawWidth, drawHeight)
+	ctx.globalAlpha = 1.0 // Reset opacity for other drawings
 }
 
 // Add this function after the game objects but before startGame
@@ -311,61 +271,68 @@ function gameLoop(timestamp) {
 		// Draw title screen
 		drawBackground()
 
-		ctx.fillStyle = '#000000'
-		ctx.font = `48px "Press Start 2P"`
-		ctx.textAlign = 'center'
-		ctx.fillText('CLAPPY', canvas.width / 2 + 4, canvas.height / 3 + 4)
-		ctx.fillText('CHEEKS', canvas.width / 2 + 4, canvas.height / 3 + 52)
-
+		// Draw title
 		ctx.fillStyle = '#FF9C00'
-		ctx.fillText('CLAPPY', canvas.width / 2, canvas.height / 3)
-		ctx.fillText('CHEEKS', canvas.width / 2, canvas.height / 3 + 48)
+		ctx.font = '48px "Press Start 2P"'
+		ctx.textAlign = 'center'
+		ctx.fillText('CLAPPY', canvas.width / 2, canvas.height / 4)
+		ctx.fillText('CHEEKS!!', canvas.width / 2, canvas.height / 4 + 48)
 
+		// Draw credits
 		ctx.fillStyle = '#FFFFFF'
 		ctx.font = '24px "Press Start 2P"'
 		ctx.fillText(
 			'CREDITS: ' + credits,
 			canvas.width / 2,
-			(canvas.height * 2) / 3
+			canvas.height / 2 + 120
 		)
 
+		// Draw prompt if has credits
 		if (credits > 0) {
 			if (Math.floor(Date.now() / 500) % 2) {
-				ctx.fillText(
-					'PRESS SPACE',
-					canvas.width / 2,
-					(canvas.height * 2) / 3 + 40
-				)
+				const promptText = isTouchDevice() ? 'TAP SCREEN' : 'PRESS SPACE'
+				ctx.fillText(promptText, canvas.width / 2, canvas.height / 2 + 180)
 			}
 		}
 
-		drawCopyright() // Add copyright to title screen
+		// Draw copyright
+		drawCopyright()
 	} else if (gameOver) {
 		// Game over screen
 		drawBackground()
-		if (Date.now() - knockoutTime > 1500) {
-			ctx.fillStyle = '#FF0000'
-			ctx.font = '36px "Press Start 2P"'
-			ctx.textAlign = 'center'
-			ctx.fillText('T.K.O.!!', canvas.width / 2, canvas.height / 3)
 
-			ctx.fillStyle = '#FFFFFF'
-			ctx.font = '24px "Press Start 2P"'
-			ctx.fillText(`SCORE: ${score}`, canvas.width / 2, canvas.height / 2)
-			ctx.fillText(
-				`CREDITS: ${credits}`,
-				canvas.width / 2,
-				canvas.height / 2 + 40
-			)
+		// Draw title at same position as title screen
+		ctx.fillStyle = '#FF9C00'
+		ctx.font = '48px "Press Start 2P"'
+		ctx.textAlign = 'center'
+		ctx.fillText('CLAPPY', canvas.width / 2, canvas.height / 4)
+		ctx.fillText('CHEEKS!!', canvas.width / 2, canvas.height / 4 + 48)
 
-			if (credits > 0) {
-				if (Math.floor(Date.now() / 500) % 2) {
-					ctx.fillText('PRESS SPACE', canvas.width / 2, (canvas.height * 2) / 3)
-				}
+		// Draw knockout text
+		ctx.fillStyle = '#FF0000'
+		ctx.font = '36px "Press Start 2P"'
+		ctx.fillText('KNOCKOUT!!', canvas.width / 2, canvas.height / 2)
+
+		// Draw score and credits
+		ctx.fillStyle = '#FFFFFF'
+		ctx.font = '24px "Press Start 2P"'
+		ctx.fillText(`SCORE: ${score}`, canvas.width / 2, canvas.height / 2 + 80)
+		ctx.fillText(
+			`CREDITS: ${credits}`,
+			canvas.width / 2,
+			canvas.height / 2 + 120
+		)
+
+		// Draw prompt at same position as title screen
+		if (credits > 0 && Date.now() - knockoutTime > KNOCKOUT_DELAY) {
+			if (Math.floor(Date.now() / 500) % 2) {
+				const promptText = isTouchDevice() ? 'TAP SCREEN' : 'PRESS SPACE'
+				ctx.fillText(promptText, canvas.width / 2, canvas.height / 2 + 180)
 			}
-
-			drawCopyright() // Add copyright to game over screen
 		}
+
+		// Draw copyright
+		drawCopyright()
 	} else {
 		// Game running
 		drawBackground()
@@ -485,40 +452,220 @@ canvas.addEventListener('touchstart', (e) => {
 	handleInput()
 })
 
-// Add this function to draw copyright
+// Update drawCopyright to use same hit detection
 function drawCopyright() {
 	ctx.fillStyle = '#666666'
-	ctx.font = '16px "Press Start 2P"'
-	ctx.textAlign = 'center'
-	ctx.fillText('not © 2024', canvas.width / 2, canvas.height - 30)
+	ctx.font = '12px "Press Start 2P"'
+	ctx.textAlign = 'left'
 
-	// Draw FWD:FWD:FWD in gold
+	const text = 'NOT © 2024 '
+	const linkText = 'Fwd:Fwd:Fwd:'
+	const fullText = text + linkText
+
+	// Calculate positions
+	const textWidth = ctx.measureText(fullText).width
+	const startX = canvas.width / 2 - textWidth / 2
+	const y = canvas.height - 20
+
+	// Draw first part in gray
+	ctx.fillText(text, startX, y)
+
+	// Draw second part in gold
+	const linkX = startX + ctx.measureText(text).width
 	ctx.fillStyle = '#FF9C00'
-	ctx.fillText('Fwd:Fwd:Fwd:', canvas.width / 2, canvas.height - 10)
+
+	// Use same hit detection for hover state
+	if (isOverLink(mouseX, mouseY)) {
+		ctx.fillRect(linkX, y + 2, ctx.measureText(linkText).width, 1)
+	}
+
+	ctx.fillText(linkText, linkX, y)
 }
+// Add mouse position tracking
+let mouseX = 0
+let mouseY = 0
+
+// Update mouse position tracking
+canvas.addEventListener('mousemove', (e) => {
+	const rect = canvas.getBoundingClientRect()
+	const scaleX = canvas.width / rect.width
+	const scaleY = canvas.height / rect.height
+
+	mouseX = (e.clientX - rect.left) * scaleX
+	mouseY = (e.clientY - rect.top) * scaleY
+
+	// Check if mouse is over the link area
+	const text = 'Fwd:Fwd:Fwd:'
+	ctx.font = '16px "Press Start 2P"'
+	const textWidth = ctx.measureText(text).width
+	const linkX = canvas.width / 2 + 20
+	const linkY = canvas.height - 20
+
+	if (
+		mouseX >= linkX - textWidth / 2 &&
+		mouseX <= linkX + textWidth / 2 &&
+		mouseY >= linkY - 16 &&
+		mouseY <= linkY + 4
+	) {
+		canvas.style.cursor = 'pointer'
+	} else {
+		canvas.style.cursor = 'default'
+	}
+})
+
+function isOverLink(x, y) {
+	const text = 'Fwd:Fwd:Fwd:'
+	ctx.font = '12px "Press Start 2P"'
+	const textWidth = ctx.measureText(text).width
+	const linkX =
+		canvas.width / 2 -
+		ctx.measureText('NOT © 2024 Fwd:Fwd:Fwd:').width / 2 +
+		ctx.measureText('NOT © 2024 ').width
+	const linkY = canvas.height - 20
+
+	const padding = 20
+	return (
+		x >= linkX - padding &&
+		x <= linkX + textWidth + padding &&
+		y >= linkY - padding * 2 && // Double padding on top
+		y <= linkY + padding // Same padding on bottom
+	)
+}
+
+// Add at the top with other variables
+let isHandlingClick = false
+
+// Single click handler for both URL and game input
+canvas.addEventListener(
+	'click',
+	(e) => {
+		if (isHandlingClick) return // Prevent multiple handlers
+		isHandlingClick = true
+
+		const rect = canvas.getBoundingClientRect()
+		const scaleX = canvas.width / rect.width
+		const scaleY = canvas.height / rect.height
+		const clickX = (e.clientX - rect.left) * scaleX
+		const clickY = (e.clientY - rect.top) * scaleY
+
+		if (isOverLink(clickX, clickY)) {
+			e.preventDefault()
+			e.stopPropagation()
+			window.open('https://fwdfwdfwd.email', '_blank')
+			isHandlingClick = false // Reset immediately for URL clicks
+			return
+		} else {
+			handleInput()
+		}
+
+		// Reset after a short delay for game inputs
+		setTimeout(() => {
+			isHandlingClick = false
+		}, 100)
+	},
+	{ capture: true }
+)
+
+// Separate handler for game actions
+canvas.addEventListener('click', handleInput)
 
 // Add after canvas initialization
 function resizeGame() {
-	const container = canvas.parentElement
-	const windowRatio = container.clientWidth / container.clientHeight
-	const gameRatio = canvas.width / canvas.height
+	const monitorFrame = document.querySelector('.monitor-frame')
+	const viewportWidth = window.innerWidth
+	const viewportHeight = window.innerHeight
 
-	let newWidth, newHeight
+	// Account for body padding (20px on each side) and some margin for safety
+	const safeWidth = viewportWidth - 60 // 20px padding + 10px safety on each side
+	const safeHeight = viewportHeight - 60 // 20px padding + 10px safety on each side
 
-	if (windowRatio < gameRatio) {
-		// Window is taller than game ratio - fit to width
-		newWidth = container.clientWidth
-		newHeight = newWidth / gameRatio
+	// Game aspect ratio is 480:720 = 0.667
+	// If viewport width is the limiting factor, base on width instead
+	if (safeWidth < safeHeight * 0.667) {
+		monitorFrame.style.width = '85vw' // Reduced from 90vw to ensure margins
+		monitorFrame.style.height = '127.5vw' // 85 * (720/480)
 	} else {
-		// Window is wider than game ratio - fit to height
-		newHeight = container.clientHeight
-		newWidth = newHeight * gameRatio
+		monitorFrame.style.height = '85vh' // Reduced from 90vh to ensure margins
+		monitorFrame.style.width = '56.67vh' // 85 * (480/720)
 	}
-
-	canvas.style.width = `${newWidth}px`
-	canvas.style.height = `${newHeight}px`
 }
 
-// Call on load and window resize
+// Call resize on load and window resize
 window.addEventListener('load', resizeGame)
-window.addEventListener('resize', resizeGame)
+window.addEventListener('resize', () => {
+	clearTimeout(window.resizeTimeout)
+	window.resizeTimeout = setTimeout(resizeGame, 100)
+})
+
+// Add this function near the top of your file
+function isTouchDevice() {
+	return (
+		'ontouchstart' in window ||
+		navigator.maxTouchPoints > 0 ||
+		navigator.msMaxTouchPoints > 0
+	)
+}
+
+// Remove any existing click handlers
+canvas.removeEventListener('click', handleInput)
+
+// Mousemove handler
+canvas.addEventListener('mousemove', (e) => {
+	const rect = canvas.getBoundingClientRect()
+	const scaleX = canvas.width / rect.width
+	const scaleY = canvas.height / rect.height
+	mouseX = (e.clientX - rect.left) * scaleX
+	mouseY = (e.clientY - rect.top) * scaleY
+
+	canvas.style.cursor = isOverLink(mouseX, mouseY) ? 'pointer' : 'default'
+})
+
+// Create a wrapper div around the canvas
+const wrapper = document.createElement('div')
+wrapper.className = 'crt-wrapper'
+canvas.parentNode.insertBefore(wrapper, canvas)
+wrapper.appendChild(canvas)
+
+// Add at the top with other variables
+let crtEffectInitialized = false
+
+function initCRTEffect() {
+	if (crtEffectInitialized) return // Prevent multiple initializations
+
+	// Base flicker - very subtle
+	gsap.to('#gameCanvas', {
+		filter: 'brightness(0.98) contrast(1.02) saturate(1.02)',
+		duration: 0.016,
+		repeat: -1,
+		yoyo: true,
+		ease: 'none',
+		onRepeat: function () {
+			if (Math.random() < 0.003) {
+				// Very rare bigger flickers (0.3% chance)
+				this.vars.filter = 'brightness(0.95) contrast(1.05) saturate(1.02)'
+				this.duration = 0.1
+			} else {
+				this.vars.filter = 'brightness(0.98) contrast(1.02) saturate(1.02)'
+				this.duration = 0.016
+			}
+		},
+	})
+
+	crtEffectInitialized = true
+}
+
+// Initialize vignette
+gsap.to('.vignette', {
+	opacity: 0.8,
+	duration: 1,
+})
+
+// Optional: Add chromatic aberration on game start/end
+function addChromaticAberration() {
+	gsap.to('#gameCanvas', {
+		filter: 'brightness(1.2) contrast(1.2) saturate(1.2) hue-rotate(2deg)',
+		duration: 0.2,
+		yoyo: true,
+		repeat: 1,
+	})
+}
