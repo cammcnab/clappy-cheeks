@@ -2,7 +2,10 @@
 <html>
 	<head>
 		<title>Clappy Cheeks</title>
-		<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+		<link
+			href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
+			rel="stylesheet"
+		/>
 		<style>
 			body {
 				margin: 0;
@@ -11,43 +14,40 @@
 				justify-content: center;
 				align-items: center;
 				min-height: 100vh;
-				background: #000;
-				flex-direction: column;
+				background: #000022;
+				overflow: hidden;
+				background-image: linear-gradient(#000022 2px, transparent 2px),
+					linear-gradient(90deg, #000022 2px, #000011 2px);
+				background-size: 30px 30px;
 			}
-			
+
 			#gameCanvas {
 				background: #000066;
 				image-rendering: pixelated;
 				image-rendering: crisp-edges;
+				max-width: calc(100vw - 40px);
+				max-height: calc(100vh - 40px);
+				width: auto;
+				height: auto;
+				border: 4px solid #000;
+				box-shadow: 0 0 0 2px #333;
 			}
 
-			.copyright-link {
-				position: absolute;
-				bottom: 20px;
+			.game-container {
+				display: flex;
+				justify-content: center;
+				align-items: center;
+				width: 100vw;
+				height: 100vh;
 				padding: 20px;
-				color: #666;
-				font-family: 'Press Start 2P', cursive;
-				font-size: 16px;
-				text-decoration: none;
-			}
-
-			.copyright-link .fwd {
-				color: #FF9C00;
-				text-decoration: underline;
-				cursor: pointer;
-			}
-
-			.copyright-link:hover .fwd {
-				color: #FFF;
+				box-sizing: border-box;
 			}
 		</style>
 	</head>
 	<body>
-		<canvas id="gameCanvas"></canvas>
-		<a href="https://fwdfwdfwd.email" 
-		   target="_blank" 
-		   rel="noopener"
-		   class="copyright-link">not © 2024 <span class="fwd">Fwd:Fwd:Fwd:</span></a>
+		<div class="game-container">
+			<canvas id="gameCanvas"></canvas>
+		</div>
 		<script src="game.js"></script>
 	</body>
 </html>
