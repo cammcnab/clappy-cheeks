@@ -40,12 +40,12 @@ armImage.src = 'images/arm.png'
 bgImage.src = 'images/bg.png'
 
 // Add these constants after the game state variables
-const GRAVITY = 0.7
-const FLAP_SPEED = -9.5
+const GRAVITY = 0.5
+const FLAP_SPEED = -8
 const CHEEKS_SIZE = 25
 const GLOVE_WIDTH = 50
-const GLOVE_GAP = 200
-const GLOVE_SPEED = 4
+const GLOVE_GAP = 250
+const GLOVE_SPEED = 3
 const KNOCKOUT_DELAY = 1500
 
 // Add audio setup
@@ -107,10 +107,30 @@ const cheeks = {
 	x: canvas.width / 3,
 	y: canvas.height / 2,
 	velocity: 0,
+	squishAmount: 0,
+	squishDuration: 100, // Duration of squish animation in ms
+	squishStartTime: 0,
 
 	draw() {
 		ctx.save()
 		ctx.translate(this.x, this.y)
+
+		// Calculate squish scale based on time
+		let xScale = 1
+		if (this.squishStartTime > 0) {
+			const elapsed = Date.now() - this.squishStartTime
+			if (elapsed < this.squishDuration) {
+				// Sine wave easing for smooth squish and release
+				const progress = elapsed / this.squishDuration
+				xScale = 1 - 0.3 * Math.sin(progress * Math.PI)
+			} else {
+				this.squishStartTime = 0
+			}
+		}
+
+		// Apply squish transformation
+		ctx.scale(xScale, 1 + (1 - xScale) * 0.5) // Compensate y-scale to maintain volume
+		
 		ctx.drawImage(
 			cheeksImage,
 			-CHEEKS_SIZE,
@@ -123,12 +143,13 @@ const cheeks = {
 
 	flap() {
 		this.velocity = FLAP_SPEED
+		this.squishStartTime = Date.now()
 		playFlapSound()
 	},
 
 	update() {
-		this.velocity += GRAVITY
-		this.y += this.velocity
+		this.velocity += GRAVITY * gameSpeed
+		this.y += this.velocity * gameSpeed
 
 		if (this.velocity > 4) {
 			this.velocity = 4
@@ -136,22 +157,61 @@ const cheeks = {
 	},
 }
 
+// Add this variable with other game state variables
+let gameStartDelay = 800 // Reduced from 1500ms to 800ms for earlier arm spawning
+let gameStartTime = 0
+
+// Add these variables with other game state variables
+let gameSpeed = 1
+const SPEED_INCREASE = 0.1 // Speed increase per 3 arms
+const MAX_SPEED = 2.0 // Maximum speed multiplier
+let lastSpeedIncreaseScore = 0
+
+// Update the score tracking to handle speed increases
+function updateScore() {
+	score++
+
+	// Check if we should increase speed (every 3 arms)
+	if (Math.floor(score / 3) > Math.floor(lastSpeedIncreaseScore / 3)) {
+		if (gameSpeed < MAX_SPEED) {
+			gameSpeed = Math.min(MAX_SPEED, gameSpeed + SPEED_INCREASE)
+			console.log('Speed increased to:', gameSpeed)
+			// Optional: Add a speed up sound effect here
+		}
+	}
+	lastSpeedIncreaseScore = score
+}
+
 const gloves = {
 	pairs: [],
 
 	spawn() {
-		const minY = GLOVE_GAP + 100
-		const maxY = canvas.height - GLOVE_GAP - 100
+		// Don't spawn gloves during initial delay
+		if (Date.now() - gameStartTime < gameStartDelay) {
+			return
+		}
+
+		const minY = GLOVE_GAP + 150
+		const maxY = canvas.height - GLOVE_GAP - 150
 		let y
 
-		if (score > 10) {
-			if (Math.random() < 0.3) {
+		// First pair of gloves always in the middle
+		if (this.pairs.length === 0) {
+			y = canvas.height / 2
+		}
+		// Early game - centered positions
+		else if (score < 20) {
+			const centerY = canvas.height / 2
+			const variance = 100
+			y = centerY + (Math.random() * variance * 2 - variance)
+		}
+		// Later game - full range
+		else {
+			if (Math.random() < 0.2) {
 				y = Math.random() < 0.5 ? minY : maxY
 			} else {
 				y = Math.random() * (maxY - minY) + minY
 			}
-		} else {
-			y = Math.random() * (maxY - minY) + minY
 		}
 
 		this.pairs.push({
@@ -195,8 +255,13 @@ const gloves = {
 	},
 
 	update() {
+		// Don't move gloves during initial delay
+		if (Date.now() - gameStartTime < gameStartDelay) {
+			return
+		}
+
 		this.pairs.forEach((pair) => {
-			pair.x -= GLOVE_SPEED
+			pair.x -= GLOVE_SPEED * gameSpeed
 		})
 
 		this.pairs = this.pairs.filter((pair) => pair.x + GLOVE_WIDTH > 0)
@@ -423,10 +488,13 @@ function handleInput() {
 		if (credits > 0) {
 			gameStarted = true
 			score = 0
+			gameSpeed = 1 // Reset speed
+			lastSpeedIncreaseScore = 0
 			gloves.pairs = []
 			cheeks.y = canvas.height / 2
 			cheeks.velocity = 0
 			credits--
+			gameStartTime = Date.now() // Set the start time
 			playCheerSound()
 		}
 	} else if (gameOver && Date.now() - knockoutTime > KNOCKOUT_DELAY) {
@@ -434,10 +502,13 @@ function handleInput() {
 			gameStarted = true
 			gameOver = false
 			score = 0
+			gameSpeed = 1 // Reset speed
+			lastSpeedIncreaseScore = 0
 			gloves.pairs = []
 			cheeks.y = canvas.height / 2
 			cheeks.velocity = 0
 			credits--
+			gameStartTime = Date.now() // Set the start time
 			playCheerSound()
 		}
 	} else if (!gameOver) {
@@ -455,11 +526,11 @@ canvas.addEventListener('touchstart', (e) => {
 // Update drawCopyright to use same hit detection
 function drawCopyright() {
 	ctx.fillStyle = '#666666'
-	ctx.font = '12px "Press Start 2P"'
+	ctx.font = '10px "Press Start 2P"'
 	ctx.textAlign = 'left'
 
 	const text = 'NOT © 2024 '
-	const linkText = 'Fwd:Fwd:Fwd:'
+	const linkText = 'FWD:FWD:FWD:'
 	const fullText = text + linkText
 
 	// Calculate positions
@@ -495,8 +566,8 @@ canvas.addEventListener('mousemove', (e) => {
 	mouseY = (e.clientY - rect.top) * scaleY
 
 	// Check if mouse is over the link area
-	const text = 'Fwd:Fwd:Fwd:'
-	ctx.font = '16px "Press Start 2P"'
+	const text = 'FWD:FWD:FWD:'
+	ctx.font = '10px "Press Start 2P"'
 	const textWidth = ctx.measureText(text).width
 	const linkX = canvas.width / 2 + 20
 	const linkY = canvas.height - 20
@@ -514,12 +585,12 @@ canvas.addEventListener('mousemove', (e) => {
 })
 
 function isOverLink(x, y) {
-	const text = 'Fwd:Fwd:Fwd:'
-	ctx.font = '12px "Press Start 2P"'
+	const text = 'FWD:FWD:FWD:'
+	ctx.font = '10px "Press Start 2P"'
 	const textWidth = ctx.measureText(text).width
 	const linkX =
 		canvas.width / 2 -
-		ctx.measureText('NOT © 2024 Fwd:Fwd:Fwd:').width / 2 +
+		ctx.measureText('NOT © 2024 FWD:FWD:FWD:').width / 2 +
 		ctx.measureText('NOT © 2024 ').width
 	const linkY = canvas.height - 20
 
