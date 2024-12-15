@@ -1,180 +1,200 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 	<head>
-		<title>Clappy Cheeks</title>
-		<link
-			href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
-			rel="stylesheet"
-		/>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<title>Clappy Cheeks!!</title>
+		<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 		<style>
 			body {
 				margin: 0;
-				padding: 3vw;
+				padding: 20px;
+				display: flex;
+				justify-content: center;
+				align-items: center;
 				min-height: 100vh;
-				display: flex;
-				justify-content: center;
-				align-items: center;
-				background: url('images/bg.png') center/cover fixed;
-				background-color: #2c2c2c;
-				position: relative;
-				box-sizing: border-box;
+				background-color: #000;
+				font-family: 'Press Start 2P', cursive;
 				overflow: hidden;
 			}
 
-			body::before {
-				content: '';
-				position: fixed;
-				top: 0;
-				left: 0;
-				width: 100%;
-				height: 100%;
-				background: inherit;
-				filter: blur(10px) brightness(0.3);
-				z-index: -1;
-			}
-
-			/* Monitor frame */
 			.monitor-frame {
-				background: linear-gradient(135deg, #e0d9d1, #c3beb7);
-				padding: 4vh 2vh;
-				border-radius: 4vw;
-				box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.5),
-					inset 0 0 0 4px rgba(0, 0, 0, 0.2), 0 10px 20px rgba(0, 0, 0, 0.3),
-					0 0 0 1px rgba(0, 0, 0, 0.1);
 				position: relative;
-				min-width: 320px;
-				min-height: 480px;
-				transition: width 0.3s, height 0.3s;
-				margin: auto;
-				display: flex;
-				justify-content: center;
-				align-items: center;
-				box-sizing: border-box;
+				width: 90vw;
+				height: 135vw;
+				max-height: 90vh;
+				max-width: 60vh;
+				background: #2a2a2a;
+				padding: 15px 15px 60px 15px;
+				border-radius: 4px;
+				box-shadow: 
+					inset 0 0 2px rgba(255,255,255,0.1),
+					0 5px 15px rgba(0,0,0,0.5);
+				background-image: 
+					url('data:image/svg+xml,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noise)" opacity="0.08"/></svg>'),
+					linear-gradient(to bottom, #2a2a2a, #252525);
 			}
 
-			/* Screen bezel */
-			.crt-wrapper {
+			/* Main screen bezel */
+			.inner-bezel {
+				position: relative;
 				width: 100%;
 				height: 100%;
-				border-radius: 1vw;
-				position: relative;
-				background: #000;
+				background: #1a1a1a;
+				border-radius: 8px;
 				overflow: hidden;
-				box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8);
-				transform: perspective(1000px) rotateX(2deg) translateY(-0.6vh);
-				display: flex;
-				justify-content: center;
-				align-items: center;
+				background-image: 
+					url('data:image/svg+xml,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noise)" opacity="0.04"/></svg>'),
+					linear-gradient(45deg, #1a1a1a, #202020);
 			}
 
-			/* Canvas sizing */
-			#gameCanvas {
+			/* Screen mask and container */
+			.canvas-container {
+				position: absolute;
+				top: 25px;
+				left: 25px;
+				right: 25px;
+				bottom: 25px;
+				overflow: hidden;
+				border-radius: 55px/50px;
+				background: #000;
+				box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+			}
+
+			/* Game and effect canvases */
+			#gameCanvas,
+			#effectCanvas {
 				position: absolute;
 				top: 0;
 				left: 0;
 				width: 100%;
 				height: 100%;
-				object-fit: fill;
-				display: block;
+				background: #000;
+				transform: scale(1.15);
 			}
 
-			/* Improved scanlines */
-			.scanlines {
+			#gameCanvas {
+				image-rendering: pixelated;
+			}
+
+			#effectCanvas {
+				pointer-events: none;
+			}
+
+			/* Control panel area */
+			.control-panel {
 				position: absolute;
-				top: 0;
+				bottom: 0;
 				left: 0;
 				right: 0;
-				bottom: 0;
-				z-index: 2;
-				pointer-events: none;
-				background: repeating-linear-gradient(
-						0deg,
-						rgba(0, 0, 0, 0.5) 0px,
-						rgba(0, 0, 0, 0.5) 1px,
-						transparent 1.5px,
-						transparent 3px
-					),
+				height: 60px;
+				background: linear-gradient(to bottom, #2a2a2a, #222);
+				border-top: 1px solid #333;
+				display: flex;
+				align-items: center;
+				padding: 0 20px;
+				background-image: 
+					url('data:image/svg+xml,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noise)" opacity="0.08"/></svg>'),
+					linear-gradient(to bottom, #2a2a2a, #222);
+			}
+
+			/* Speaker grille */
+			.speaker-grille {
+				position: absolute;
+				bottom: 10px;
+				left: 20px;
+				width: 80px;
+				height: 40px;
+				background-image: 
 					repeating-linear-gradient(
 						90deg,
-						rgba(255, 0, 0, 0.1),
-						rgba(0, 255, 0, 0.1),
-						rgba(0, 0, 255, 0.1) 3px
+						#222,
+						#222 2px,
+						#1a1a1a 2px,
+						#1a1a1a 4px
 					);
-				mix-blend-mode: overlay;
-				opacity: 0.4;
+				border-radius: 2px;
+				border: 1px solid #333;
 			}
 
-			/* Monitor details */
-			.monitor-bottom {
+			/* Control buttons */
+			.controls {
 				position: absolute;
-				bottom: 0;
-				left: 0;
-				right: 0;
+				bottom: 15px;
+				right: 20px;
 				display: flex;
-				justify-content: space-between;
-				align-items: center;
-				padding: 1.5vh 5vw;
+				gap: 10px;
 			}
 
+			.control-button {
+				width: 40px;
+				height: 20px;
+				background: #1a1a1a;
+				border: 1px solid #333;
+				border-radius: 2px;
+				position: relative;
+			}
+
+			.control-button::after {
+				content: '';
+				position: absolute;
+				top: 50%;
+				left: 50%;
+				transform: translate(-50%, -50%);
+				width: 30px;
+				height: 2px;
+				background: #333;
+			}
+
+			/* Power LED with improved visibility */
 			.power-led {
+				position: absolute;
+				bottom: 20px;
+				right: 150px;
 				width: 8px;
 				height: 8px;
-				background: radial-gradient(
-					circle at 40% 40%,
-					#33ff33 0%,
-					#2cd42c 50%,
-					#1f991f 100%
-				);
+				background: #33ff33;
 				border-radius: 50%;
-				box-shadow: 0 0 2px #33ff33, 0 0 5px #33ff33;
+				box-shadow: 
+					0 0 4px #33ff33,
+					0 0 6px #33ff33,
+					inset 0 -1px 2px rgba(0,0,0,0.2);
+				border: 1px solid rgba(51, 255, 51, 0.4);
+				z-index: 1;
 			}
 
-			.monitor-label {
-				font-weight: 500;
-				font-family: monospace;
-				font-size: 11px;
-				color: #888;
-				text-transform: uppercase;
-				letter-spacing: 1px;
-				text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.5);
-			}
-
-			/* Vignette effect */
-			.vignette {
+			/* LED label */
+			.power-led::after {
+				content: 'POWER';
 				position: absolute;
-				top: 0;
-				left: 0;
-				right: 0;
-				bottom: 0;
-				z-index: 3;
-				background: radial-gradient(
-					circle at center,
-					transparent 60%,
-					rgba(0, 0, 0, 0.6) 100%
-				);
-				pointer-events: none;
-				opacity: 0.8;
-			}
-
-			/* Remove control buttons */
-			.crt-controls {
-				display: none;
+				top: -15px;
+				left: 50%;
+				transform: translateX(-50%);
+				font-size: 6px;
+				color: #666;
+				white-space: nowrap;
 			}
 		</style>
-		<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 	</head>
 	<body>
 		<div class="monitor-frame">
-			<div class="crt-wrapper">
-				<canvas id="gameCanvas"></canvas>
-				<div class="scanlines"></div>
-				<div class="vignette"></div>
+			<div class="inner-bezel">
+				<div class="canvas-container">
+					<canvas id="gameCanvas"></canvas>
+					<canvas id="effectCanvas"></canvas>
+				</div>
 			</div>
-			<div class="monitor-bottom">
+			<div class="control-panel">
+				<div class="speaker-grille"></div>
 				<div class="power-led"></div>
-				<div class="monitor-label">Fwd:Vision 9000</div>
+				<div class="controls">
+					<div class="control-button"></div>
+					<div class="control-button"></div>
+					<div class="control-button"></div>
+				</div>
 			</div>
 		</div>
-		<script src="game.js"></script>
+		<script type="module" src="shaders.js"></script>
+		<script type="module" src="game.js"></script>
 	</body>
 </html>
