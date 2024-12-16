@@ -1,0 +1,33 @@
+# Disallow all robots from accessing the site
+User-agent: *
+Disallow: /
+
+# Explicitly disallow major search engine bots
+User-agent: Googlebot
+Disallow: /
+
+User-agent: Bingbot
+Disallow: /
+
+User-agent: Slurp
+Disallow: /
+
+User-agent: DuckDuckBot
+Disallow: /
+
+User-agent: Baiduspider
+Disallow: /
+
+User-agent: YandexBot
+Disallow: /
+
+# Prevent media indexing
+User-agent: Googlebot-Image
+Disallow: /
+
+User-agent: Googlebot-Video
+Disallow: /
+
+# Prevent archive.org from archiving the site
+User-agent: archive.org_bot
+Disallow: / 
