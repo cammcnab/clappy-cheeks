@@ -1294,6 +1294,11 @@ function checkBounds() {
 document.addEventListener('DOMContentLoaded', async () => {
 	console.log('DOM loaded, initializing game...')
 	try {
+		// Wait for power-on sequence to complete if it exists
+		if (window.powerOnComplete) {
+			await window.powerOnComplete;
+		}
+
 		const initialized = await init()
 		if (initialized) {
 			console.log('Game initialized, starting game loop...')
