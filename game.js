@@ -37,7 +37,7 @@ const CHEEKS_SIZE = 25
 const GLOVE_WIDTH = 50
 let GLOVE_OPENING = 250
 const GLOVE_SET_GAP = 0.65 // Percentage of screen width between arm sets
-const GLOVE_SPEED = 2.0
+const GLOVE_SPEED = 4.0
 const KNOCKOUT_DELAY = 1500
 const SPEED_INCREASE = 0.08
 const MAX_SPEED = 1.6
@@ -74,92 +74,115 @@ const SQUISH_DURATION = 100
 async function init() {
 	console.log('Initializing game components...')
 
-	// Get canvas elements and monitor frame
-	gameCanvas = document.getElementById('gameCanvas')
-	monitorFrame = document.querySelector('.monitor-frame')
-
-	if (!gameCanvas) {
-		throw new Error('Game canvas not found')
-	}
-
-	if (!monitorFrame) {
-		throw new Error('Monitor frame not found')
-	}
-
-	// Get context with explicit pixel format
-	ctx = gameCanvas.getContext('2d', {
-		alpha: false,
-		desynchronized: true,
-		preserveDrawingBuffer: false,
-	})
-
-	if (!ctx) {
-		throw new Error('Could not get canvas context')
-	}
-
-	// Set up canvas container
-	const container = gameCanvas.parentElement
-	if (container) {
-		container.style.position = 'absolute'
-		container.style.left = '50%'
-		container.style.top = '50%'
-		container.style.transform = 'translate(-50%, -50%)'
-		container.style.display = 'flex'
-		container.style.justifyContent = 'center'
-		container.style.alignItems = 'center'
-		container.style.overflow = 'hidden'
-		container.style.touchAction = 'manipulation'
-		container.style.width = '100%'
-		container.style.height = '100%'
-	}
-
-	// Set canvas styles - simplified positioning
-	gameCanvas.style.position = 'absolute'
-	gameCanvas.style.width = '100%'
-	gameCanvas.style.height = '100%'
-	gameCanvas.style.imageRendering = 'pixelated'
-	gameCanvas.style.touchAction = 'manipulation'
-	gameCanvas.style.webkitTapHighlightColor = 'transparent'
-	gameCanvas.style.userSelect = 'none'
-	gameCanvas.style.webkitUserSelect = 'none'
-
-	// Initialize CRT effect
 	try {
-		effectCanvas = document.createElement('canvas')
-		effectCanvas.id = 'effectCanvas'
-		effectCanvas.style.position = 'absolute'
-		effectCanvas.style.width = '100%'
-		effectCanvas.style.height = '100%'
-		effectCanvas.style.pointerEvents = 'none'
-		effectCanvas.style.zIndex = '2'
-		effectCanvas.style.transform = 'scale(1.1)'
-		effectCanvas.style.borderRadius = `calc(var(--bezel-radius) * 2.5)`
-		if (container) {
-			container.appendChild(effectCanvas)
+		// Get canvas elements and monitor frame
+		gameCanvas = document.getElementById('gameCanvas')
+		monitorFrame = document.querySelector('.monitor-frame')
+
+		if (!gameCanvas) {
+			throw new Error('Game canvas not found')
 		}
 
-		// Set initial canvas dimensions
-		handleResize()
+		if (!monitorFrame) {
+			throw new Error('Monitor frame not found')
+		}
 
-		crtEffect = new CRTEffect(effectCanvas)
-		console.log('CRT effect initialized')
+		// Get context with explicit pixel format
+		ctx = gameCanvas.getContext('2d', {
+			alpha: false,
+			desynchronized: true,
+			preserveDrawingBuffer: false,
+		})
+
+		if (!ctx) {
+			throw new Error('Could not get canvas context')
+		}
+
+		// Set up canvas container
+		const container = gameCanvas.parentElement
+		if (container) {
+			container.style.position = 'absolute'
+			container.style.left = '50%'
+			container.style.top = '50%'
+			container.style.transform = 'translate(-50%, -50%)'
+			container.style.display = 'flex'
+			container.style.justifyContent = 'center'
+			container.style.alignItems = 'center'
+			container.style.overflow = 'hidden'
+			container.style.touchAction = 'manipulation'
+			container.style.width = '100%'
+			container.style.height = '100%'
+		}
+
+		// Set canvas styles - simplified positioning
+		gameCanvas.style.position = 'absolute'
+		gameCanvas.style.width = '100%'
+		gameCanvas.style.height = '100%'
+		gameCanvas.style.imageRendering = 'pixelated'
+		gameCanvas.style.touchAction = 'manipulation'
+		gameCanvas.style.webkitTapHighlightColor = 'transparent'
+		gameCanvas.style.userSelect = 'none'
+		gameCanvas.style.webkitUserSelect = 'none'
+
+		// Initialize CRT effect
+		try {
+			effectCanvas = document.createElement('canvas')
+			effectCanvas.id = 'effectCanvas'
+			effectCanvas.style.position = 'absolute'
+			effectCanvas.style.width = '100%'
+			effectCanvas.style.height = '100%'
+			effectCanvas.style.pointerEvents = 'none'
+			effectCanvas.style.zIndex = '2'
+			effectCanvas.style.transform = 'scale(1.1)'
+			effectCanvas.style.borderRadius = `calc(var(--bezel-radius) * 2.5)`
+			if (container) {
+				container.appendChild(effectCanvas)
+			}
+
+			// Set initial canvas dimensions
+			handleResize()
+
+			// Initialize CRT effect only if WebGL is available
+			if (effectCanvas.getContext('webgl')) {
+				crtEffect = new CRTEffect(effectCanvas)
+				console.log('CRT effect initialized')
+			} else {
+				console.log('WebGL not available, skipping CRT effect')
+			}
+		} catch (error) {
+			console.error('Failed to initialize CRT effect:', error)
+			// Continue without CRT effect
+			crtEffect = null
+		}
+
+		// Add resize handler with debouncing
+		let resizeTimeout
+		window.addEventListener('resize', () => {
+			clearTimeout(resizeTimeout)
+			resizeTimeout = setTimeout(handleResize, 100)
+		})
+
+		// Rest of initialization
+		console.log('Loading game assets...')
+		await loadImages()
+		console.log('Images loaded')
+		await initAudio()
+		console.log('Audio initialized')
+		initGameObjects()
+		console.log('Game objects initialized')
+		initInputHandlers()
+		console.log('Input handlers initialized')
+		startGame()
+		console.log('Game started')
+
+		// Set initial timestamp
+		lastFrameTime = performance.now()
+		
+		return true
 	} catch (error) {
-		console.error('Failed to initialize CRT effect:', error)
+		console.error('Initialization error:', error)
+		return false
 	}
-
-	// Add resize handler with debouncing
-	let resizeTimeout
-	window.addEventListener('resize', () => {
-		clearTimeout(resizeTimeout)
-		resizeTimeout = setTimeout(handleResize, 100)
-	})
-
-	// Rest of initialization
-	await loadImages()
-	await initAudio()
-	initGameObjects()
-	initInputHandlers()
-	startGame()
 }
 
 // Update resize handler
@@ -335,12 +358,12 @@ function startGame() {
 	gameSpeed = 1
 	lastSpeedIncreaseScore = 0
 	firstAction = false
+	// Reset share button state when new game starts
+	window.shareData = null;
 
 	if (cheeks) {
 		cheeks.x = window.gameScale ? window.gameScale.width / 3 : CANVAS_WIDTH / 3
-		cheeks.y = window.gameScale
-			? window.gameScale.height / 2
-			: CANVAS_HEIGHT / 2
+		cheeks.y = window.gameScale ? window.gameScale.height / 2 : CANVAS_HEIGHT / 2
 		cheeks.velocity = 0
 	}
 
@@ -441,14 +464,18 @@ function initGameObjects() {
 			this.pairs.forEach((pair) => {
 				// Calculate arm dimensions based on screen width while maintaining aspect ratio
 				const armWidth = Math.min(scale.width, scale.height) / 8
-				const armHeight = (armWidth / images.armImage.width) * images.armImage.height
+				const armHeight =
+					(armWidth / images.armImage.width) * images.armImage.height
 				const gapHalf = GLOVE_OPENING / 2
 
 				// Draw top arm
 				ctx.save()
 				ctx.translate(pair.x, pair.gapY - gapHalf)
 				ctx.rotate(Math.PI) // 180 degrees to point down
-				ctx.scale(armWidth / images.armImage.width, armWidth / images.armImage.width)
+				ctx.scale(
+					armWidth / images.armImage.width,
+					armWidth / images.armImage.width
+				)
 				ctx.drawImage(
 					images.armImage,
 					-images.armImage.width / 2,
@@ -461,7 +488,10 @@ function initGameObjects() {
 				// Draw bottom arm
 				ctx.save()
 				ctx.translate(pair.x, pair.gapY + gapHalf)
-				ctx.scale(armWidth / images.armImage.width, armWidth / images.armImage.width)
+				ctx.scale(
+					armWidth / images.armImage.width,
+					armWidth / images.armImage.width
+				)
 				ctx.drawImage(
 					images.armImage,
 					-images.armImage.width / 2,
@@ -598,62 +628,108 @@ function gameLoop(timestamp) {
 		return
 	}
 
-	// Calculate delta time
-	const deltaTime = timestamp - lastFrameTime
-	lastFrameTime = timestamp
+	try {
+		// Calculate delta time and cap it to prevent huge jumps
+		const deltaTime = Math.min(timestamp - lastFrameTime, 32) // Cap at ~30 FPS worth of time
+		const timeScale = deltaTime / 16.667 // Scale relative to 60 FPS
+		lastFrameTime = timestamp
 
-	// Clear the canvas using actual dimensions
-	ctx.clearRect(0, 0, gameCanvas.width, gameCanvas.height)
+		// Clear the canvas using actual dimensions
+		ctx.clearRect(0, 0, gameCanvas.width, gameCanvas.height)
 
-	// Draw background first (always skip ring)
-	drawBackground(true)
+		// Draw background first (always skip ring)
+		drawBackground(true)
 
-	// Draw ring next (for all game states)
-	drawRing()
+		// Draw ring next (for all game states)
+		drawRing()
 
-	// Draw game state specific elements
-	if (!gameStarted) {
-		drawTitleScreen()
-	} else if (gameOver) {
-		drawGameOverScreen()
-	} else {
-		// Update game objects
-		if (cheeks) cheeks.update()
-		if (gloves) gloves.update()
+		// Draw game state specific elements
+		if (!gameStarted) {
+			drawTitleScreen()
+		} else if (gameOver) {
+			drawGameOverScreen()
+			// Enable share button when game is over
+			if (window.onGameEnd) {
+				const detail = {
+					score: totalScore + score,
+					isGameOver: true,
+					roundsLeft: roundsLeft
+				};
+				window.dispatchEvent(new CustomEvent('gameEnd', { detail }));
+			}
+		} else {
+			// Update game objects with time scaling
+			if (cheeks) {
+				cheeks.velocity += GRAVITY * gameSpeed * timeScale
+				cheeks.y += cheeks.velocity * gameSpeed * timeScale
+				if (cheeks.velocity > 4) {
+					cheeks.velocity = 4
+				}
+			}
 
-		// Check collisions
-		if (checkCollisions()) {
-			gameOver = true
-			knockoutTime = performance.now()
-			roundsLeft--
+			if (gloves) {
+				// Don't move gloves during initial delay
+				if (performance.now() - gameStartTime >= gameStartDelay) {
+					const speed = GLOVE_SPEED * gameSpeed * timeScale * (window.gameScale.width / CANVAS_WIDTH)
+					
+					gloves.pairs.forEach((pair) => {
+						pair.x -= speed
+					})
+
+					gloves.pairs = gloves.pairs.filter((pair) => pair.x + GLOVE_WIDTH > 0)
+
+					// Increase spacing between arm pairs
+					const minSpacing = window.gameScale.width * GLOVE_SET_GAP
+					if (
+						gloves.pairs.length === 0 ||
+						gloves.pairs[gloves.pairs.length - 1].x <
+							window.gameScale.width - minSpacing
+					) {
+						gloves.spawn()
+					}
+				}
+			}
+
+			// Check collisions
+			if (checkCollisions()) {
+				gameOver = true
+				knockoutTime = performance.now()
+				roundsLeft--
+			}
+
+			// Check bounds
+			if (checkBounds()) {
+				gameOver = true
+				knockoutTime = performance.now()
+				roundsLeft--
+			}
+
+			// Draw game objects
+			if (gloves) gloves.draw()
+			if (cheeks) cheeks.draw()
+
+			// Draw HUD on top of everything
+			drawHUD()
 		}
 
-		// Check bounds
-		if (checkBounds()) {
-			gameOver = true
-			knockoutTime = performance.now()
-			roundsLeft--
+		// Apply CRT effect only if available
+		if (crtEffect && crtEffect.gl) {
+			try {
+				crtEffect.render(gameCanvas)
+			} catch (error) {
+				console.error('CRT effect error:', error)
+				// Disable CRT effect if it fails
+				crtEffect = null
+			}
 		}
 
-		// Draw game objects
-		if (gloves) gloves.draw()
-		if (cheeks) cheeks.draw()
-
-		// Draw HUD on top of everything
-		drawHUD()
+		// Request next frame
+		requestAnimationFrame(gameLoop)
+	} catch (error) {
+		console.error('Game loop error:', error)
+		// Try to recover by requesting next frame
+		requestAnimationFrame(gameLoop)
 	}
-
-	// Apply CRT effect
-	if (crtEffect) {
-		try {
-			crtEffect.render(gameCanvas)
-		} catch (error) {
-			console.error('CRT effect error:', error)
-		}
-	}
-
-	// Request next frame
-	requestAnimationFrame(gameLoop)
 }
 
 // Separate ring drawing function
@@ -744,7 +820,8 @@ function drawHUD() {
 		const promptSize = Math.min(unit * 1.2, width * 0.04)
 		ctx.font = `${promptSize}px "Press Start 2P"`
 		ctx.textAlign = 'center'
-		ctx.fillStyle = Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
+		ctx.fillStyle =
+			Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
 		ctx.fillText('PRESS SPACE', width / 2, height / 2)
 	}
 
@@ -783,12 +860,7 @@ function drawHUD() {
 
 	// White background box for points
 	ctx.fillStyle = '#98FF98'
-	ctx.fillRect(
-		startX,
-		boxY,
-		pointsBoxWidth,
-		boxHeight
-	)
+	ctx.fillRect(startX, boxY, pointsBoxWidth, boxHeight)
 
 	// Black background box for rounds
 	ctx.fillStyle = '#000000'
@@ -802,12 +874,12 @@ function drawHUD() {
 	// Draw points and rounds text side by side
 	ctx.textAlign = 'left'
 	ctx.textBaseline = 'middle'
-	
+
 	// Points text
 	ctx.font = `${fontSize}px "Press Start 2P"` // Ensure font is set before each text
 	ctx.fillStyle = '#000000'
 	ctx.fillText(pointsText, startX + horizontalPadding, boxY + boxHeight / 2)
-	
+
 	// Rounds text
 	ctx.font = `${fontSize}px "Press Start 2P"` // Ensure font is set before each text
 	ctx.fillStyle = '#FFFFFF'
@@ -962,10 +1034,12 @@ function drawTitleScreen() {
 
 			// Calculate dimensions for proper centering
 			const gloveWidth = gloveSize
-			const gloveHeight = (gloveSize / images.armImage.width) * images.armImage.height
+			const gloveHeight =
+				(gloveSize / images.armImage.width) * images.armImage.height
 
 			// Calculate glove movement based on flashing text timing
-			const moveAmount = Math.floor(performance.now() / 250) % 2 ? unit * 0.4 : 0
+			const moveAmount =
+				Math.floor(performance.now() / 250) % 2 ? unit * 0.4 : 0
 
 			// Left glove
 			ctx.save()
@@ -1076,7 +1150,7 @@ function drawGameOverScreen() {
 		ctx.font = `${textSize}px "Press Start 2P"`
 		const finalScoreText = `FINAL SCORE: ${totalScore + score}`
 		const scoreMetrics = ctx.measureText(finalScoreText)
-		
+
 		// Calculate text dimensions including ascent and descent
 		const textHeight = textSize // Base height of the font
 		const verticalPadding = textSize * 0.6 // Consistent padding vertically
@@ -1149,7 +1223,8 @@ function checkCollisions() {
 
 	for (const pair of gloves.pairs) {
 		const armWidth = Math.min(scale.width, scale.height) / 8
-		const armHeight = (armWidth / images.armImage.width) * images.armImage.height
+		const armHeight =
+			(armWidth / images.armImage.width) * images.armImage.height
 		const gapHalf = GLOVE_OPENING / 2
 
 		// Collision boxes match actual glove dimensions
@@ -1157,14 +1232,14 @@ function checkCollisions() {
 			x: pair.x - armWidth / 2,
 			y: pair.gapY - gapHalf - armHeight,
 			width: armWidth,
-			height: armHeight
+			height: armHeight,
 		}
 
 		const bottomGlove = {
 			x: pair.x - armWidth / 2,
 			y: pair.gapY + gapHalf,
 			width: armWidth,
-			height: armHeight
+			height: armHeight,
 		}
 
 		if (
@@ -1172,6 +1247,8 @@ function checkCollisions() {
 			intersectRect(cheeksBox, bottomGlove)
 		) {
 			playKnockoutSound()
+			// Reset share button state when round ends
+			window.shareData = null;
 			return true
 		}
 
@@ -1206,6 +1283,8 @@ function checkBounds() {
 	const outOfBounds = cheeks.y < 0 || cheeks.y > window.gameScale.height
 	if (outOfBounds) {
 		playKnockoutSound()
+		// Reset share button state when round ends
+		window.shareData = null;
 	}
 	return outOfBounds
 }
@@ -1214,9 +1293,13 @@ function checkBounds() {
 document.addEventListener('DOMContentLoaded', async () => {
 	console.log('DOM loaded, initializing game...')
 	try {
-		await init()
-		console.log('Game initialized, starting game loop...')
-		requestAnimationFrame(gameLoop)
+		const initialized = await init()
+		if (initialized) {
+			console.log('Game initialized, starting game loop...')
+			requestAnimationFrame(gameLoop)
+		} else {
+			console.error('Game initialization failed')
+		}
 	} catch (error) {
 		console.error('Failed to initialize game:', error)
 	}

@@ -13,10 +13,14 @@
 			href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
 			rel="stylesheet"
 		/>
+		<link
+			href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@300&display=swap"
+			rel="stylesheet"
+		/>
 		<style>
 			:root {
 				--tv-padding: min(3vw, 3vh);
-				--tv-chin: min(12vw, 12vh);
+				--tv-chin: max(min(12vw, 12vh), 80px);
 				--bezel-radius: min(8vw, 8vh);
 				--noise-texture: url('data:image/svg+xml,<svg viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg"><filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="2.5" numOctaves="4" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noise)" opacity="0.08"/></svg>');
 			}
@@ -143,7 +147,7 @@
 				bottom: 0;
 				left: 0;
 				right: 0;
-				height: calc(var(--tv-chin) * 0.7);
+				height: var(--tv-chin);
 				background: linear-gradient(to bottom, #2a2a2a, #222);
 				border-top: 1px solid #333;
 				display: flex;
@@ -163,11 +167,8 @@
 
 			/* Speaker grille */
 			.speaker-grille {
-				position: absolute;
-				bottom: calc(var(--tv-padding) * 0.7);
-				left: var(--tv-padding);
-				width: calc(var(--tv-chin) * 1.2);
 				height: calc(var(--tv-chin) * 0.5);
+				width: calc(var(--tv-chin) * 1.2);
 				background-image: var(--noise-texture),
 					repeating-linear-gradient(
 						90deg,
@@ -182,18 +183,64 @@
 					0 1px 1px rgba(255, 255, 255, 0.05);
 			}
 
-			/* Control buttons */
-			.controls {
+			/* Brand logo */
+			.brand-logo {
 				position: absolute;
-				bottom: calc(var(--tv-padding) * 0.7);
-				right: var(--tv-padding);
+				left: 50%;
+				top: 50%;
+				transform: translate(-50%, -50%);
+				font-family: 'Times New Roman', serif;
+				font-size: calc(var(--tv-chin) * 0.22);
+				letter-spacing: 0.12em;
+				background: linear-gradient(180deg, #bbb 0%, #888 50%, #999 100%);
+				-webkit-background-clip: text;
+				background-clip: text;
+				color: transparent;
+				text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+				opacity: 0.8;
+				font-weight: 600;
+				font-style: italic;
+			}
+
+			/* Power indicator group */
+			.power-group {
 				display: flex;
-				gap: calc(var(--tv-padding) * 0.5);
+				align-items: center;
+				gap: calc(var(--tv-chin) * 0.15);
+				margin-left: calc(var(--tv-chin) * 0.3);
+			}
+
+			/* Power LED */
+			.power-led {
+				width: calc(var(--tv-chin) * 0.06);
+				height: calc(var(--tv-chin) * 0.06);
+				background: #33ff33;
+				border-radius: 50%;
+				box-shadow: 0 0 4px #33ff33, 0 0 6px #33ff33,
+					inset 0 -1px 2px rgba(0, 0, 0, 0.2);
+				border: 1px solid rgba(51, 255, 51, 0.4);
+			}
+
+			/* LED label */
+			.power-text {
+				font-family: 'Roboto Condensed', sans-serif;
+				font-size: calc(var(--tv-chin) * 0.09);
+				color: #666;
+				text-transform: uppercase;
+				letter-spacing: 0.1em;
+				font-weight: 300;
+			}
+
+			/* Controls */
+			.controls {
+				margin-left: auto;
+				display: flex;
+				gap: calc(var(--tv-chin) * 0.15);
 			}
 
 			.control-button {
-				width: calc(var(--tv-chin) * 0.6);
-				height: calc(var(--tv-chin) * 0.3);
+				width: calc(var(--tv-chin) * 0.7);
+				height: calc(var(--tv-chin) * 0.35);
 				background: #1a1a1a;
 				border: 1px solid #333;
 				border-radius: calc(var(--bezel-radius) * 0.1);
@@ -201,87 +248,213 @@
 				background-image: var(--noise-texture),
 					linear-gradient(180deg, #1a1a1a 0%, #151515 40%, #111 100%);
 				box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.05),
-					0 1px 2px rgba(0, 0, 0, 0.2);
+					0 1px 2px rgba(0, 0, 0, 0.2),
+					inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+				cursor: pointer;
+				user-select: none;
+				transition: all 0.1s ease-out;
+				font-family: 'Roboto Condensed', sans-serif;
+				font-size: calc(var(--tv-chin) * 0.11);
+				color: #666;
+				text-transform: uppercase;
+				letter-spacing: 0.1em;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				font-weight: 600;
 			}
 
-			.control-button::after {
+			/* Disabled share button */
+			#shareButton:disabled {
+				cursor: not-allowed;
+				opacity: 0.15;
+				background: #0a0a0a;
+				border-color: #1a1a1a;
+				color: #333;
+				box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.4);
+				transform: scale(0.95);
+			}
+
+			#shareButton:disabled::before {
+				opacity: 0;
+			}
+
+			/* Active share button */
+			#shareButton.share-ready {
+				animation: shareButtonBlink 1.2s ease-in-out infinite;
+				opacity: 1;
+				cursor: pointer;
+				transform: scale(1);
+				transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+				filter: none;
+			}
+
+			@keyframes shareButtonBlink {
+				0%,
+				100% {
+					background: #1a0000;
+					border-color: #400;
+					color: #ff6666;
+					box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.4),
+						0 0 0 rgba(255, 0, 0, 0);
+					text-shadow: none;
+				}
+				50% {
+					background: #ff0000;
+					border-color: #ff0000;
+					color: white;
+					box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.5),
+						0 0 20px rgba(255, 0, 0, 0.8);
+					text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+				}
+			}
+
+			/* Remove hover effects for disabled button */
+			#shareButton:disabled:hover {
+				background: #0a0a0a;
+				box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.4);
+			}
+
+			/* Specific hover for active share button */
+			#shareButton.share-ready:hover {
+				filter: brightness(1.2);
+			}
+
+			.control-button:hover {
+				background-image: var(--noise-texture),
+					linear-gradient(180deg, #1d1d1d 0%, #171717 40%, #131313 100%);
+				box-shadow: inset 0 1px 3px rgba(255, 255, 255, 0.07),
+					0 1px 2px rgba(0, 0, 0, 0.2),
+					inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+			}
+
+			.control-button:active {
+				transform: translateY(1px);
+				background-image: var(--noise-texture),
+					linear-gradient(180deg, #151515 0%, #111 40%, #0d0d0d 100%);
+				box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.3),
+					0 1px 1px rgba(0, 0, 0, 0.1), inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+			}
+
+			.control-button::before {
 				content: '';
 				position: absolute;
-				top: 50%;
-				left: 50%;
-				transform: translate(-50%, -50%);
-				width: 80%;
-				height: calc(var(--tv-padding) * 0.1);
-				background: linear-gradient(to right, #222 0%, #333 50%, #222 100%);
-			}
-
-			/* Power LED with improved visibility */
-			.power-led {
-				position: absolute;
-				bottom: calc(var(--tv-padding) * 1.2);
-				left: calc(var(--tv-chin) * 1.5);
-				width: calc(var(--tv-padding) * 0.4);
-				height: calc(var(--tv-padding) * 0.4);
-				background: #33ff33;
-				border-radius: 50%;
-				box-shadow: 0 0 4px #33ff33, 0 0 6px #33ff33,
-					inset 0 -1px 2px rgba(0, 0, 0, 0.2);
-				border: 1px solid rgba(51, 255, 51, 0.4);
-				z-index: 1;
-			}
-
-			/* LED label */
-			.power-led::after {
-				content: 'POWER';
-				position: absolute;
-				top: calc(var(--tv-padding) * -0.7);
-				left: 50%;
-				transform: translateX(-50%);
-				font-size: calc(var(--tv-padding) * 0.35);
-				color: #666;
-				white-space: nowrap;
+				top: 0;
+				left: 0;
+				right: 0;
+				height: 40%;
+				background: linear-gradient(
+					180deg,
+					rgba(255, 255, 255, 0.04) 0%,
+					rgba(255, 255, 255, 0) 100%
+				);
+				border-radius: calc(var(--bezel-radius) * 0.1)
+					calc(var(--bezel-radius) * 0.1) 0 0;
+				pointer-events: none;
 			}
 
 			@media (max-width: 768px) {
 				:root {
 					--tv-padding: min(3vw, 3vh);
-					--tv-chin: min(15vw, 15vh);
+					--tv-chin: max(min(15vw, 15vh), 80px);
 					--bezel-radius: min(7vw, 7vh);
 				}
 
-				.inner-bezel {
-					border-radius: calc(var(--bezel-radius) * 0.8);
+				.brand-logo {
+					font-size: calc(var(--tv-chin) * 0.18);
 				}
 
-				.canvas-container,
-				.game-wrapper,
-				#gameCanvas,
-				#effectCanvas {
-					border-radius: calc(var(--bezel-radius) * 1.4);
+				.power-text {
+					font-size: calc(var(--tv-chin) * 0.11);
 				}
+			}
 
-				.control-panel {
-					height: calc(var(--tv-chin) * 0.6);
-				}
+			.control-button:disabled {
+				cursor: not-allowed;
+				opacity: 0.15;
+				background-image: var(--noise-texture),
+					linear-gradient(180deg, #0a0a0a 0%, #080808 40%, #050505 100%);
+				border-color: #1a1a1a;
+				color: #333;
+				box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+				transform: scale(0.95);
+				filter: grayscale(100%);
+				transition: all 0.3s ease-out;
+			}
 
-				.speaker-grille {
-					width: calc(var(--tv-chin) * 1.5);
-					height: calc(var(--tv-chin) * 0.4);
-				}
+			.control-button:disabled::before {
+				opacity: 0.1;
+			}
 
-				.control-button {
-					width: calc(var(--tv-chin) * 0.5);
-					height: calc(var(--tv-chin) * 0.25);
-				}
+			.control-button.share-ready {
+				animation: shareButtonBlink 1.5s ease-in-out infinite;
+				opacity: 1;
+				cursor: pointer;
+				color: #fff;
+				text-shadow: 0 0 10px rgba(255, 0, 0, 0.8);
+				transform: scale(1.02);
+				filter: none;
+				border-color: #ff0000;
+			}
 
-				.power-led {
-					width: calc(var(--tv-padding) * 0.5);
-					height: calc(var(--tv-padding) * 0.5);
+			@keyframes shareButtonBlink {
+				0%,
+				100% {
+					background-image: var(--noise-texture),
+						linear-gradient(180deg, #330000 0%, #220000 40%, #110000 100%);
+					box-shadow: inset 0 1px 2px rgba(255, 0, 0, 0.1),
+						0 1px 2px rgba(0, 0, 0, 0.2), inset 0 0 0 1px rgba(255, 0, 0, 0.1),
+						0 0 5px rgba(255, 0, 0, 0.1);
+					text-shadow: 0 0 8px rgba(255, 0, 0, 0.5);
+					border-color: #660000;
 				}
+				50% {
+					background-image: var(--noise-texture),
+						linear-gradient(180deg, #ff0000 0%, #cc0000 40%, #990000 100%);
+					box-shadow: 0 0 30px rgba(255, 0, 0, 0.4),
+						inset 0 1px 2px rgba(255, 255, 255, 0.5),
+						0 1px 2px rgba(0, 0, 0, 0.2),
+						inset 0 0 0 1px rgba(255, 255, 255, 0.3),
+						0 0 20px rgba(255, 0, 0, 0.4);
+					text-shadow: 0 0 15px #fff, 0 0 30px rgba(255, 0, 0, 0.9);
+					border-color: #ff3333;
+				}
+			}
 
-				.power-led::after {
-					font-size: calc(var(--tv-padding) * 0.3);
-				}
+			.control-button.share-ready:hover {
+				transform: scale(1.05);
+				filter: brightness(1.2);
+			}
+
+			.control-button.share-ready:active {
+				transform: scale(1.02) translateY(1px);
+				filter: brightness(0.95);
+				box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3),
+					0 0 20px rgba(255, 0, 0, 0.3);
+			}
+
+			/* Reset button in final game over state */
+			.control-button.game-over {
+				background: #1a1a1a;
+				color: #fff;
+				border: 2px solid #fff;
+				box-shadow: 0 0 15px rgba(255, 255, 255, 0.4),
+					inset 0 1px 2px rgba(255, 255, 255, 0.05);
+				font-weight: 700;
+				text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+			}
+
+			.control-button.game-over:hover {
+				filter: brightness(1.2);
+				border-color: #fff;
+				box-shadow: 0 0 20px rgba(255, 255, 255, 0.6),
+					inset 0 1px 2px rgba(255, 255, 255, 0.1);
+			}
+
+			.control-button.game-over:active {
+				transform: translateY(1px);
+				box-shadow: 0 0 10px rgba(255, 255, 255, 0.3),
+					inset 0 2px 4px rgba(0, 0, 0, 0.3);
 			}
 		</style>
 	</head>
@@ -298,11 +471,33 @@
 				</div>
 				<div class="control-panel">
 					<div class="speaker-grille"></div>
-					<div class="power-led"></div>
+					<div class="power-group">
+						<div class="power-led"></div>
+						<div class="power-text">POWER</div>
+					</div>
+					<div class="brand-logo">FWD:VISION</div>
 					<div class="controls">
-						<div class="control-button"></div>
-						<div class="control-button"></div>
-						<div class="control-button"></div>
+						<div
+							class="control-button"
+							onclick="window.open('https://fwdfwdfwd.email', '_blank')"
+						>
+							INFO
+						</div>
+						<div 
+							class="control-button" 
+							id="resetButton"
+							onclick="window.location.reload()"
+						>
+							RESET
+						</div>
+						<div
+							class="control-button"
+							id="shareButton"
+							disabled
+							onclick="shareScore()"
+						>
+							SHARE
+						</div>
 					</div>
 				</div>
 			</div>
@@ -347,5 +542,83 @@
 		<!-- Game scripts -->
 		<script type="module" src="shaders.js"></script>
 		<script type="module" src="game.js"></script>
+
+		<!-- Add sharing functionality -->
+		<script>
+			const shareScore = async () => {
+				try {
+					const isFinalKnockout =
+						window.shareData && window.shareData.roundsLeft === 0
+					const t = isFinalKnockout
+						? `I clapped cheeks and got ${window.shareData.score} points!`
+						: `Come clap some cheeks with me!`
+
+					console.log('Share state:', {
+						isFinalKnockout,
+						shareData: window.shareData,
+						message: t,
+					})
+
+					try {
+						await navigator.clipboard.writeText(t + ' clappycheeks.com')
+						console.log('Clipboard text set:', t + ' clappycheeks.com')
+					} catch (e) {
+						console.log('Background clipboard copy failed:', e)
+					}
+
+					if (navigator.canShare) {
+						await navigator.share({
+							title: t,
+							url: 'https://clappycheeks.com',
+						})
+						console.log('Share completed with title:', t)
+					} else {
+						console.log('Share API not supported')
+					}
+				} catch (e) {
+					console.error('Share operation failed:', e)
+				}
+			}
+
+			document.addEventListener('DOMContentLoaded', () => {
+				const b = document.getElementById('shareButton')
+				if (b) {
+					b.disabled = false
+					b.classList.remove('share-ready')
+					window.shareData = null // Reset share data on load
+				}
+			})
+
+			window.onGameEnd = (score, isGameOver, roundsLeft) => {
+				const b = document.getElementById('shareButton');
+				const r = document.getElementById('resetButton');
+				if (b) {
+					window.shareData = { score, roundsLeft };
+					console.log('Share data updated:', window.shareData);
+					
+					// Only add blinking class if it's the final knockout (no rounds left)
+					if (roundsLeft === 0) {
+						console.log('Final knockout detected - enabling share button blink');
+						b.classList.add('share-ready');
+						if (r) r.classList.add('game-over');
+					} else {
+						console.log('Not final knockout - disabling share button blink');
+						b.classList.remove('share-ready');
+						if (r) r.classList.remove('game-over');
+					}
+				}
+			};
+
+			window.addEventListener('gameEnd', (e) => {
+				if (e.detail) {
+					console.log('Game end event received:', e.detail)
+					window.onGameEnd(
+						e.detail.score,
+						e.detail.isGameOver,
+						e.detail.roundsLeft
+					)
+				}
+			})
+		</script>
 	</body>
 </html>
