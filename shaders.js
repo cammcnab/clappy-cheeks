@@ -7,7 +7,7 @@ const vertexShaderSource = `
     
     void main() {
         gl_Position = aVertexPosition;
-        vTextureCoord = vec2(aTextureCoord.x, 1.0 - aTextureCoord.y);
+        vTextureCoord = aTextureCoord;
     }
 `;
 
@@ -22,17 +22,17 @@ const fragmentShaderSource = `
     
     // CRT parameters
     const float SCANLINE_INTENSITY = 0.125;
-    const float CURVATURE = 4.0;
-    const float VIGNETTE_INTENSITY = 0.25;
-    const float BRIGHTNESS = 1.1;
-    const float DISTORTION = 0.2;
+    const float CURVATURE = 3.0;
+    const float VIGNETTE_INTENSITY = 0.3;
+    const float BRIGHTNESS = 1.15;
+    const float DISTORTION = 0.12;
     const float RGB_OFFSET = 0.001;
     
     // Helper function to create screen curvature
     vec2 curveRemapUV(vec2 uv) {
         uv = uv * 2.0 - 1.0;
         vec2 offset = abs(uv.yx) / vec2(CURVATURE, CURVATURE);
-        uv = uv + uv * offset * offset;
+        uv = uv + uv * offset * offset * 0.8;
         uv = uv * 0.5 + 0.5;
         return uv;
     }
