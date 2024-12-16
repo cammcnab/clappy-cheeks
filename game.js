@@ -1253,13 +1253,14 @@ function checkCollisions() {
 		}
 
 		if (!pair.passed && cheeks.x > pair.x) {
-			pair.passed = true
-			score++
+			pair.passed = true;
+			// Add cheat points if in cheat mode
+			score += window.cheatPoints || 1;
 
 			// Increase game speed every 3 points up to max speed
-			if (score % 3 === 0 && gameSpeed < MAX_SPEED) {
-				gameSpeed = Math.min(MAX_SPEED, gameSpeed + SPEED_INCREASE)
-				console.log('Speed increased to:', gameSpeed)
+			if (score % 3 === 0 && gameSpeed < MAX_SPEED && !window.cheatMode) {
+				gameSpeed = Math.min(MAX_SPEED, gameSpeed + SPEED_INCREASE);
+				console.log('Speed increased to:', gameSpeed);
 			}
 		}
 	}

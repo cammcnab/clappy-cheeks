@@ -545,6 +545,779 @@
 
 		<!-- Add sharing functionality -->
 		<script>
+			// Initialize variables at global scope
+			let konamiCode, konamiIndex, cheatMode;
+			let flashPowerLED, activateCheatMode, resetCheatMode;
+
+			// Move all Konami code implementation into DOMContentLoaded
+			document.addEventListener('DOMContentLoaded', () => {
+				console.log('Initializing Konami code handler...');
+
+				// Konami code sequence
+				konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
+				konamiIndex = 0;
+				cheatMode = false;
+
+				// Function to flash power LED
+				flashPowerLED = (color, duration = 100) => {
+					const led = document.querySelector('.power-led');
+					if (!led) {
+						console.warn('Power LED element not found');
+						return;
+					}
+
+					console.log('Flashing LED:', color);
+
+					// Store original styles
+					const originalBackground = led.style.background;
+					const originalBoxShadow = led.style.boxShadow;
+					const originalBorder = led.style.border;
+
+					// Set flash styles
+					led.style.background = color;
+					led.style.boxShadow = `0 0 4px ${color}, 0 0 6px ${color}, inset 0 -1px 2px rgba(0, 0, 0, 0.2)`;
+					led.style.border = `1px solid ${color}40`;
+
+					// Reset after duration
+					setTimeout(() => {
+						led.style.background = originalBackground || '#33ff33';
+						led.style.boxShadow = originalBoxShadow || '0 0 4px #33ff33, 0 0 6px #33ff33, inset 0 -1px 2px rgba(0, 0, 0, 0.2)';
+						led.style.border = originalBorder || '1px solid rgba(51, 255, 51, 0.4)';
+					}, duration);
+				};
+
+				// Add Konami code listener - works on any screen
+				document.addEventListener('keydown', (e) => {
+					console.log('Key pressed:', e.key, 'Expected:', konamiCode[konamiIndex], 'Index:', konamiIndex);
+					
+					// Always check for Konami code regardless of game state
+					if (e.key === konamiCode[konamiIndex]) {
+						console.log('✓ Correct key! Progress:', konamiIndex + 1, '/', konamiCode.length);
+						// Flash blue for correct input
+						flashPowerLED('#3333ff');
+						konamiIndex++;
+
+						if (konamiIndex === konamiCode.length) {
+							console.log('🎉 Konami code completed! Activating cheat mode...');
+							activateCheatMode();
+						}
+					} else {
+						console.log('✗ Wrong key, resetting sequence');
+						// Flash red for incorrect input
+						flashPowerLED('#ff3333');
+						konamiIndex = 0;
+					}
+				});
+
+				// Separate function to activate cheat mode
+				activateCheatMode = () => {
+					console.log('Activating cheat mode...');
+					cheatMode = true;
+					window.cheatMode = true; // Make it accessible to game.js
+					konamiIndex = 0;
+					window.gameSpeed = 0.5;
+					window.cheatPoints = 10;
+					
+					console.log('Game state updated:', {
+						cheatMode: window.cheatMode,
+						gameSpeed: window.gameSpeed,
+						cheatPoints: window.cheatPoints
+					});
+					
+					// Create or update cheat mode indicator
+					let cheatIndicator = document.getElementById('cheatIndicator');
+					if (!cheatIndicator) {
+						cheatIndicator = document.createElement('div');
+						cheatIndicator.id = 'cheatIndicator';
+						cheatIndicator.style.position = 'absolute';
+						cheatIndicator.style.bottom = 'calc(var(--tv-chin) + 20px)';
+						cheatIndicator.style.left = '50%';
+						cheatIndicator.style.transform = 'translateX(-50%)';
+						cheatIndicator.style.fontFamily = '"Press Start 2P", cursive';
+						cheatIndicator.style.fontSize = '16px';
+						cheatIndicator.style.color = '#ff0000';
+						cheatIndicator.style.textShadow = '0 0 10px rgba(255,0,0,0.8)';
+						cheatIndicator.style.zIndex = '100';
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+		/>
+		<meta name="robots" content="noindex, nofollow" />
+		<meta name="googlebot" content="noindex, nofollow" />
+		<title>Clappy Cheeks!!</title>
+		<link
+			href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
+			rel="stylesheet"
+		/>
+		<link
+			href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@300&display=swap"
+			rel="stylesheet"
+		/>
+		<style>
+			:root {
+				--tv-padding: min(3vw, 3vh);
+				--tv-chin: max(min(12vw, 12vh), 80px);
+				--bezel-radius: min(8vw, 8vh);
+				--noise-texture: url('data:image/svg+xml,<svg viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg"><filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="2.5" numOctaves="4" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noise)" opacity="0.08"/></svg>');
+			}
+
+			* {
+				box-sizing: border-box;
+				margin: 0;
+				padding: 0;
+			}
+
+			html,
+			body {
+				width: 100%;
+				height: 100%;
+				overflow: hidden;
+			}
+
+			body {
+				display: flex;
+				justify-content: center;
+				align-items: center;
+				background-color: #000;
+				font-family: 'Press Start 2P', cursive;
+				-webkit-tap-highlight-color: transparent;
+				touch-action: manipulation;
+			}
+
+			.tv-container {
+				position: relative;
+				width: 100%;
+				height: 100%;
+				display: flex;
+				justify-content: center;
+				align-items: center;
+				overflow: hidden;
+			}
+
+			.monitor-frame {
+				position: relative;
+				width: 100%;
+				height: 100%;
+				background: #2a2a2a;
+				box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.1),
+					0 5px 15px rgba(0, 0, 0, 0.5);
+				background-image: var(--noise-texture),
+					linear-gradient(
+						180deg,
+						#2a2a2a 0%,
+						#252525 20%,
+						#2a2a2a 50%,
+						#252525 80%,
+						#222 100%
+					);
+			}
+
+			/* Main screen bezel */
+			.inner-bezel {
+				position: absolute;
+				top: var(--tv-padding);
+				left: var(--tv-padding);
+				right: var(--tv-padding);
+				bottom: var(--tv-chin);
+				background: #1a1a1a;
+				border-radius: var(--bezel-radius);
+				overflow: hidden;
+				background-image: var(--noise-texture),
+					linear-gradient(
+						45deg,
+						#1a1a1a 0%,
+						#202020 25%,
+						#1a1a1a 50%,
+						#151515 75%,
+						#1a1a1a 100%
+					);
+				box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.05),
+					inset 0 0 20px rgba(0, 0, 0, 0.5);
+			}
+
+			/* Screen mask and container */
+			.canvas-container {
+				position: absolute;
+				top: calc(var(--tv-padding) * 0.7);
+				left: calc(var(--tv-padding) * 0.7);
+				right: calc(var(--tv-padding) * 0.7);
+				bottom: calc(var(--tv-padding) * 0.7);
+				overflow: hidden;
+				border-radius: calc(var(--bezel-radius) * 2.5);
+				background: #000;
+				box-shadow: inset 0 2px 5px rgba(255, 255, 255, 0.1),
+					inset 0 0 20px rgba(0, 0, 0, 0.9);
+			}
+
+			/* Game wrapper */
+			.game-wrapper {
+				position: relative;
+				width: calc(100% + var(--tv-padding));
+				height: calc(100% + var(--tv-padding));
+			}
+
+			/* Game and effect canvases */
+			#gameCanvas,
+			#effectCanvas {
+				position: absolute;
+				top: 0;
+				left: 0;
+				width: 100%;
+				height: 100%;
+				background: #000;
+			}
+
+			#gameCanvas {
+				image-rendering: pixelated;
+				z-index: 1;
+			}
+
+			#effectCanvas {
+				pointer-events: none;
+				z-index: 2;
+			}
+
+			/* Control panel area */
+			.control-panel {
+				position: absolute;
+				bottom: 0;
+				left: 0;
+				right: 0;
+				height: var(--tv-chin);
+				background: linear-gradient(to bottom, #2a2a2a, #222);
+				border-top: 1px solid #333;
+				display: flex;
+				align-items: center;
+				padding: 0 var(--tv-padding);
+				background-image: var(--noise-texture),
+					linear-gradient(
+						180deg,
+						#2a2a2a 0%,
+						#252525 30%,
+						#222 70%,
+						#1a1a1a 100%
+					);
+				box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.1),
+					0 -1px 3px rgba(0, 0, 0, 0.2);
+			}
+
+			/* Speaker grille */
+			.speaker-grille {
+				height: calc(var(--tv-chin) * 0.5);
+				width: calc(var(--tv-chin) * 1.2);
+				background-image: var(--noise-texture),
+					repeating-linear-gradient(
+						90deg,
+						#222,
+						#222 2px,
+						#1a1a1a 2px,
+						#1a1a1a 4px
+					);
+				border-radius: calc(var(--bezel-radius) * 0.15);
+				border: 1px solid #333;
+				box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3),
+					0 1px 1px rgba(255, 255, 255, 0.05);
+			}
+
+			/* Brand logo */
+			.brand-logo {
+				position: absolute;
+				left: 50%;
+				top: 50%;
+				transform: translate(-50%, -50%);
+				font-family: 'Times New Roman', serif;
+				font-size: calc(var(--tv-chin) * 0.22);
+				letter-spacing: 0.12em;
+				background: linear-gradient(180deg, #bbb 0%, #888 50%, #999 100%);
+				-webkit-background-clip: text;
+				background-clip: text;
+				color: transparent;
+				text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+				opacity: 0.8;
+				font-weight: 600;
+				font-style: italic;
+			}
+
+			/* Power indicator group */
+			.power-group {
+				display: flex;
+				align-items: center;
+				gap: calc(var(--tv-chin) * 0.15);
+				margin-left: calc(var(--tv-chin) * 0.3);
+			}
+
+			/* Power LED */
+			.power-led {
+				width: calc(var(--tv-chin) * 0.06);
+				height: calc(var(--tv-chin) * 0.06);
+				background: #33ff33;
+				border-radius: 50%;
+				box-shadow: 0 0 4px #33ff33, 0 0 6px #33ff33,
+					inset 0 -1px 2px rgba(0, 0, 0, 0.2);
+				border: 1px solid rgba(51, 255, 51, 0.4);
+			}
+
+			/* LED label */
+			.power-text {
+				font-family: 'Roboto Condensed', sans-serif;
+				font-size: calc(var(--tv-chin) * 0.09);
+				color: #666;
+				text-transform: uppercase;
+				letter-spacing: 0.1em;
+				font-weight: 300;
+			}
+
+			/* Controls */
+			.controls {
+				margin-left: auto;
+				display: flex;
+				gap: calc(var(--tv-chin) * 0.15);
+			}
+
+			.control-button {
+				width: calc(var(--tv-chin) * 0.7);
+				height: calc(var(--tv-chin) * 0.35);
+				background: #1a1a1a;
+				border: 1px solid #333;
+				border-radius: calc(var(--bezel-radius) * 0.1);
+				position: relative;
+				background-image: var(--noise-texture),
+					linear-gradient(180deg, #1a1a1a 0%, #151515 40%, #111 100%);
+				box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.05),
+					0 1px 2px rgba(0, 0, 0, 0.2),
+					inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+				cursor: pointer;
+				user-select: none;
+				transition: all 0.1s ease-out;
+				font-family: 'Roboto Condensed', sans-serif;
+				font-size: calc(var(--tv-chin) * 0.11);
+				color: #666;
+				text-transform: uppercase;
+				letter-spacing: 0.1em;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				font-weight: 600;
+			}
+
+			/* Disabled share button */
+			#shareButton:disabled {
+				cursor: not-allowed;
+				opacity: 0.15;
+				background: #0a0a0a;
+				border-color: #1a1a1a;
+				color: #333;
+				box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.4);
+				transform: scale(0.95);
+			}
+
+			#shareButton:disabled::before {
+				opacity: 0;
+			}
+
+			/* Active share button */
+			#shareButton.share-ready {
+				animation: shareButtonBlink 1.2s ease-in-out infinite;
+				opacity: 1;
+				cursor: pointer;
+				transform: scale(1);
+				transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+				filter: none;
+			}
+
+			@keyframes shareButtonBlink {
+				0%,
+				100% {
+					background: #1a0000;
+					border-color: #400;
+					color: #ff6666;
+					box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.4),
+						0 0 0 rgba(255, 0, 0, 0);
+					text-shadow: none;
+				}
+				50% {
+					background: #ff0000;
+					border-color: #ff0000;
+					color: white;
+					box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.5),
+						0 0 20px rgba(255, 0, 0, 0.8);
+					text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+				}
+			}
+
+			/* Remove hover effects for disabled button */
+			#shareButton:disabled:hover {
+				background: #0a0a0a;
+				box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.4);
+			}
+
+			/* Specific hover for active share button */
+			#shareButton.share-ready:hover {
+				filter: brightness(1.2);
+			}
+
+			.control-button:hover {
+				background-image: var(--noise-texture),
+					linear-gradient(180deg, #1d1d1d 0%, #171717 40%, #131313 100%);
+				box-shadow: inset 0 1px 3px rgba(255, 255, 255, 0.07),
+					0 1px 2px rgba(0, 0, 0, 0.2),
+					inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+			}
+
+			.control-button:active {
+				transform: translateY(1px);
+				background-image: var(--noise-texture),
+					linear-gradient(180deg, #151515 0%, #111 40%, #0d0d0d 100%);
+				box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.3),
+					0 1px 1px rgba(0, 0, 0, 0.1), inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+			}
+
+			.control-button::before {
+				content: '';
+				position: absolute;
+				top: 0;
+				left: 0;
+				right: 0;
+				height: 40%;
+				background: linear-gradient(
+					180deg,
+					rgba(255, 255, 255, 0.04) 0%,
+					rgba(255, 255, 255, 0) 100%
+				);
+				border-radius: calc(var(--bezel-radius) * 0.1)
+					calc(var(--bezel-radius) * 0.1) 0 0;
+				pointer-events: none;
+			}
+
+			@media (max-width: 768px) {
+				:root {
+					--tv-padding: min(3vw, 3vh);
+					--tv-chin: max(min(15vw, 15vh), 80px);
+					--bezel-radius: min(7vw, 7vh);
+				}
+
+				.brand-logo {
+					font-size: calc(var(--tv-chin) * 0.18);
+				}
+
+				.power-text {
+					font-size: calc(var(--tv-chin) * 0.11);
+				}
+			}
+
+			.control-button:disabled {
+				cursor: not-allowed;
+				opacity: 0.15;
+				background-image: var(--noise-texture),
+					linear-gradient(180deg, #0a0a0a 0%, #080808 40%, #050505 100%);
+				border-color: #1a1a1a;
+				color: #333;
+				box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+				transform: scale(0.95);
+				filter: grayscale(100%);
+				transition: all 0.3s ease-out;
+			}
+
+			.control-button:disabled::before {
+				opacity: 0.1;
+			}
+
+			.control-button.share-ready {
+				animation: shareButtonBlink 1.5s ease-in-out infinite;
+				opacity: 1;
+				cursor: pointer;
+				color: #fff;
+				text-shadow: 0 0 10px rgba(255, 0, 0, 0.8);
+				transform: scale(1.02);
+				filter: none;
+				border-color: #ff0000;
+			}
+
+			@keyframes shareButtonBlink {
+				0%,
+				100% {
+					background-image: var(--noise-texture),
+						linear-gradient(180deg, #330000 0%, #220000 40%, #110000 100%);
+					box-shadow: inset 0 1px 2px rgba(255, 0, 0, 0.1),
+						0 1px 2px rgba(0, 0, 0, 0.2), inset 0 0 0 1px rgba(255, 0, 0, 0.1),
+						0 0 5px rgba(255, 0, 0, 0.1);
+					text-shadow: 0 0 8px rgba(255, 0, 0, 0.5);
+					border-color: #660000;
+				}
+				50% {
+					background-image: var(--noise-texture),
+						linear-gradient(180deg, #ff0000 0%, #cc0000 40%, #990000 100%);
+					box-shadow: 0 0 30px rgba(255, 0, 0, 0.4),
+						inset 0 1px 2px rgba(255, 255, 255, 0.5),
+						0 1px 2px rgba(0, 0, 0, 0.2),
+						inset 0 0 0 1px rgba(255, 255, 255, 0.3),
+						0 0 20px rgba(255, 0, 0, 0.4);
+					text-shadow: 0 0 15px #fff, 0 0 30px rgba(255, 0, 0, 0.9);
+					border-color: #ff3333;
+				}
+			}
+
+			.control-button.share-ready:hover {
+				transform: scale(1.05);
+				filter: brightness(1.2);
+			}
+
+			.control-button.share-ready:active {
+				transform: scale(1.02) translateY(1px);
+				filter: brightness(0.95);
+				box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3),
+					0 0 20px rgba(255, 0, 0, 0.3);
+			}
+
+			/* Reset button in final game over state */
+			.control-button.game-over {
+				background: #1a1a1a;
+				color: #fff;
+				border: 2px solid #fff;
+				box-shadow: 0 0 15px rgba(255, 255, 255, 0.4),
+					inset 0 1px 2px rgba(255, 255, 255, 0.05);
+				font-weight: 700;
+				text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+			}
+
+			.control-button.game-over:hover {
+				filter: brightness(1.2);
+				border-color: #fff;
+				box-shadow: 0 0 20px rgba(255, 255, 255, 0.6),
+					inset 0 1px 2px rgba(255, 255, 255, 0.1);
+			}
+
+			.control-button.game-over:active {
+				transform: translateY(1px);
+				box-shadow: 0 0 10px rgba(255, 255, 255, 0.3),
+					inset 0 2px 4px rgba(0, 0, 0, 0.3);
+			}
+		</style>
+	</head>
+	<body>
+		<div class="tv-container">
+			<div class="monitor-frame">
+				<div class="inner-bezel">
+					<div class="canvas-container">
+						<div class="game-wrapper">
+							<canvas id="gameCanvas"></canvas>
+							<canvas id="effectCanvas"></canvas>
+						</div>
+					</div>
+				</div>
+				<div class="control-panel">
+					<div class="speaker-grille"></div>
+					<div class="power-group">
+						<div class="power-led"></div>
+						<div class="power-text">POWER</div>
+					</div>
+					<div class="brand-logo">FWD:VISION</div>
+					<div class="controls">
+						<div
+							class="control-button"
+							onclick="window.open('https://fwdfwdfwd.email', '_blank')"
+						>
+							INFO
+						</div>
+						<div 
+							class="control-button" 
+							id="resetButton"
+							onclick="window.location.reload()"
+						>
+							RESET
+						</div>
+						<div
+							class="control-button"
+							id="shareButton"
+							disabled
+							onclick="shareScore()"
+						>
+							SHARE
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Error handling and debugging -->
+		<script>
+			console.log('Starting script initialization...')
+
+			// Global error handler
+			window.onerror = function (msg, url, lineNo, columnNo, error) {
+				console.error('Global error:', {
+					message: msg,
+					url: url,
+					line: lineNo,
+					column: columnNo,
+					error: error,
+				})
+				return false
+			}
+
+			// Unhandled promise rejection handler
+			window.onunhandledrejection = function (event) {
+				console.error('Unhandled promise rejection:', event.reason)
+			}
+
+			// DOM ready handler
+			document.addEventListener('DOMContentLoaded', function () {
+				console.log('DOM loaded, elements:', {
+					gameCanvas: document.getElementById('gameCanvas'),
+					effectCanvas: document.getElementById('effectCanvas'),
+					wrapper: document.querySelector('.game-wrapper'),
+				})
+			})
+
+			// Load complete handler
+			window.addEventListener('load', function () {
+				console.log('Window load complete')
+			})
+		</script>
+
+		<!-- Game scripts -->
+		<script type="module" src="shaders.js"></script>
+		<script type="module" src="game.js"></script>
+
+		<!-- Add sharing functionality -->
+		<script>
+			// Konami code sequence
+			const konamiCode = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
+			let konamiIndex = 0;
+			let cheatMode = false;
+
+			// Function to flash power LED
+			function flashPowerLED(color, duration = 100) {
+				const led = document.querySelector('.power-led');
+				if (!led) {
+					console.warn('Power LED element not found');
+					return;
+				}
+
+				console.log('Flashing LED:', color);
+
+				// Store original styles
+				const originalBackground = led.style.background;
+				const originalBoxShadow = led.style.boxShadow;
+				const originalBorder = led.style.border;
+
+				// Set flash styles
+				led.style.background = color;
+				led.style.boxShadow = `0 0 4px ${color}, 0 0 6px ${color}, inset 0 -1px 2px rgba(0, 0, 0, 0.2)`;
+				led.style.border = `1px solid ${color}40`;
+
+				// Reset after duration
+				setTimeout(() => {
+					led.style.background = originalBackground || '#33ff33';
+					led.style.boxShadow = originalBoxShadow || '0 0 4px #33ff33, 0 0 6px #33ff33, inset 0 -1px 2px rgba(0, 0, 0, 0.2)';
+					led.style.border = originalBorder || '1px solid rgba(51, 255, 51, 0.4)';
+				}, duration);
+			}
+
+			// Add Konami code listener - works on any screen
+			document.addEventListener('keydown', (e) => {
+				console.log('Key pressed:', e.key, 'Expected:', konamiCode[konamiIndex]);
+				
+				// Always check for Konami code regardless of game state
+				if (e.key === konamiCode[konamiIndex]) {
+					console.log('Correct key! Progress:', konamiIndex + 1, '/', konamiCode.length);
+					// Flash blue for correct input
+					flashPowerLED('#3333ff');
+					konamiIndex++;
+
+					if (konamiIndex === konamiCode.length) {
+						console.log('Konami code completed! Activating cheat mode...');
+						activateCheatMode();
+					}
+				} else {
+					console.log('Wrong key, resetting sequence');
+					// Flash red for incorrect input
+					flashPowerLED('#ff3333');
+					konamiIndex = 0;
+				}
+			});
+
+			// Separate function to activate cheat mode
+			function activateCheatMode() {
+				console.log('Activating cheat mode...');
+				cheatMode = true;
+				window.cheatMode = true; // Make it accessible to game.js
+				konamiIndex = 0;
+				window.gameSpeed = 0.5;
+				window.cheatPoints = 10;
+				
+				console.log('Game state updated:', {
+					cheatMode: window.cheatMode,
+					gameSpeed: window.gameSpeed,
+					cheatPoints: window.cheatPoints
+				});
+				
+				// Create or update cheat mode indicator
+				let cheatIndicator = document.getElementById('cheatIndicator');
+				if (!cheatIndicator) {
+					cheatIndicator = document.createElement('div');
+					cheatIndicator.id = 'cheatIndicator';
+					cheatIndicator.style.position = 'absolute';
+					cheatIndicator.style.bottom = 'calc(var(--tv-chin) + 20px)';
+					cheatIndicator.style.left = '50%';
+					cheatIndicator.style.transform = 'translateX(-50%)';
+					cheatIndicator.style.fontFamily = '"Press Start 2P", cursive';
+					cheatIndicator.style.fontSize = '16px';
+					cheatIndicator.style.color = '#ff0000';
+					cheatIndicator.style.textShadow = '0 0 10px rgba(255,0,0,0.8)';
+					cheatIndicator.style.zIndex = '100';
+					cheatIndicator.style.animation = 'cheatBlink 1s infinite';
+					document.querySelector('.canvas-container').appendChild(cheatIndicator);
+					console.log('Cheat indicator created');
+
+					// Add blink animation
+					const style = document.createElement('style');
+					style.textContent = `
+						@keyframes cheatBlink {
+							0%, 100% { opacity: 1; }
+							50% { opacity: 0.3; }
+						}
+					`;
+					document.head.appendChild(style);
+				}
+				cheatIndicator.textContent = 'CHEAT MODE ACTIVATED';
+
+				// Flash power LED red rapidly for cheat activation
+				let flashCount = 0;
+				const flashInterval = setInterval(() => {
+					if (flashCount >= 6) {
+						clearInterval(flashInterval);
+						return;
+					}
+					flashPowerLED('#ff3333', 50);
+					flashCount++;
+				}, 100);
+			}
+
+			// Add reset handler for cheat mode
+			const resetCheatMode = () => {
+				console.log('Resetting cheat mode...');
+				cheatMode = false;
+				window.cheatMode = false;
+				window.gameSpeed = 1;
+				window.cheatPoints = 0;
+				const cheatIndicator = document.getElementById('cheatIndicator');
+				if (cheatIndicator) {
+					cheatIndicator.remove();
+				}
+				console.log('Cheat mode reset complete');
+			};
+
+			// Update reset button click handler
+			document.getElementById('resetButton').onclick = () => {
+				resetCheatMode();
+				window.location.reload();
+			};
+
 			const shareScore = async () => {
 				try {
 					const isFinalKnockout =
