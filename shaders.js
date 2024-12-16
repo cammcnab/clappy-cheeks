@@ -6,7 +6,7 @@ const vertexShaderSource = `
     varying vec2 vTextureCoord;
     
     void main() {
-        gl_Position = aVertexPosition;
+        gl_Position = vec4(aVertexPosition.x, -aVertexPosition.y, aVertexPosition.z, aVertexPosition.w);
         vTextureCoord = aTextureCoord;
     }
 `;
