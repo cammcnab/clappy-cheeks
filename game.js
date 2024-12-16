@@ -20,6 +20,7 @@ let images = {
 	cheeksImage: null,
 	armImage: null,
 	bgImage: null,
+	crowdImage: null,
 }
 let audio = {
 	clapSounds: [],
@@ -31,14 +32,15 @@ let audio = {
 const CANVAS_WIDTH = 480
 const CANVAS_HEIGHT = 720
 const GRAVITY = 0.5
-const FLAP_SPEED = -8
+const CLAP_SPEED = -8
 const CHEEKS_SIZE = 25
 const GLOVE_WIDTH = 50
-let gloveGap = 250
-const GLOVE_SPEED = 2.5
+let GLOVE_OPENING = 250
+const GLOVE_SET_GAP = 0.65 // Percentage of screen width between arm sets
+const GLOVE_SPEED = 2.0
 const KNOCKOUT_DELAY = 1500
-const SPEED_INCREASE = 0.1
-const MAX_SPEED = 2.0
+const SPEED_INCREASE = 0.08
+const MAX_SPEED = 1.6
 
 // Game variables
 let gameCanvas
@@ -51,7 +53,8 @@ let gameStarted = false
 let gameOver = false
 let score = 0
 let totalScore = 0
-let roundsLeft = 5
+let roundsLeft = 3
+let currentRound = 1
 let knockoutTime = 0
 let lastFrameTime = 0
 let gameStartDelay = 800
@@ -63,6 +66,8 @@ let mouseY = 0
 let isHandlingClick = false
 let crtEffectInitialized = false
 let squishStartTime = 0
+let firstAction = false
+let hasEverActed = false
 const SQUISH_DURATION = 100
 
 // Initialize function
@@ -212,7 +217,7 @@ function handleResize() {
 	}
 
 	// Update glove gaps and positions
-	gloveGap = baseUnit * 8
+	GLOVE_OPENING = baseUnit * 8
 
 	// Set canvas styles to fill container
 	gameCanvas.style.position = 'absolute'
@@ -329,6 +334,7 @@ function startGame() {
 	score = 0
 	gameSpeed = 1
 	lastSpeedIncreaseScore = 0
+	firstAction = false
 
 	if (cheeks) {
 		cheeks.x = window.gameScale ? window.gameScale.width / 3 : CANVAS_WIDTH / 3
@@ -350,6 +356,7 @@ async function loadImages() {
 		loadImage('images/cheeks.png').then((img) => (images.cheeksImage = img)),
 		loadImage('images/arm.png').then((img) => (images.armImage = img)),
 		loadImage('images/bg.png').then((img) => (images.bgImage = img)),
+		loadImage('images/crowd.png').then((img) => (images.crowdImage = img)),
 	]
 
 	await Promise.all(imagePromises)
@@ -432,41 +439,35 @@ function initGameObjects() {
 			const scale = window.gameScale
 
 			this.pairs.forEach((pair) => {
-				// Adjust arm width and height
-				const armWidth = Math.min(scale.width, scale.height) / 10
-				const armHeight = scale.height / 2.5 // Slightly longer to reach edges
-				const gapHalf = gloveGap / 2
+				// Calculate arm dimensions based on screen width while maintaining aspect ratio
+				const armWidth = Math.min(scale.width, scale.height) / 8
+				const armHeight = (armWidth / images.armImage.width) * images.armImage.height
+				const gapHalf = GLOVE_OPENING / 2
 
-				// Draw top arm - adjusted to touch top edge
+				// Draw top arm
 				ctx.save()
 				ctx.translate(pair.x, pair.gapY - gapHalf)
-				ctx.scale(
-					armWidth / images.armImage.width,
-					armHeight / images.armImage.height
-				)
-				ctx.rotate(Math.PI)
-				ctx.drawImage(
-					images.armImage,
-					-images.armImage.width / 2,
-					-images.armImage.height,
-					images.armImage.width,
-					images.armImage.height * 1.2 // Extend image slightly
-				)
-				ctx.restore()
-
-				// Draw bottom arm - keep current positioning
-				ctx.save()
-				ctx.translate(pair.x, pair.gapY + gapHalf)
-				ctx.scale(
-					armWidth / images.armImage.width,
-					armHeight / images.armImage.height
-				)
+				ctx.rotate(Math.PI) // 180 degrees to point down
+				ctx.scale(armWidth / images.armImage.width, armWidth / images.armImage.width)
 				ctx.drawImage(
 					images.armImage,
 					-images.armImage.width / 2,
 					0,
 					images.armImage.width,
-					images.armImage.height * 1.2 // Extend image slightly
+					images.armImage.height
+				)
+				ctx.restore()
+
+				// Draw bottom arm
+				ctx.save()
+				ctx.translate(pair.x, pair.gapY + gapHalf)
+				ctx.scale(armWidth / images.armImage.width, armWidth / images.armImage.width)
+				ctx.drawImage(
+					images.armImage,
+					-images.armImage.width / 2,
+					0,
+					images.armImage.width,
+					images.armImage.height
 				)
 				ctx.restore()
 			})
@@ -489,7 +490,7 @@ function initGameObjects() {
 			this.pairs = this.pairs.filter((pair) => pair.x + GLOVE_WIDTH > 0)
 
 			// Increase spacing between arm pairs
-			const minSpacing = window.gameScale.width * 0.6 // Increased spacing
+			const minSpacing = window.gameScale.width * GLOVE_SET_GAP
 			if (
 				this.pairs.length === 0 ||
 				this.pairs[this.pairs.length - 1].x <
@@ -506,15 +507,16 @@ function initGameObjects() {
 			const safeHeight = scale.height - safePadding * 2
 
 			// Increase minimum gap between arms
-			gloveGap = Math.min(scale.height * 0.4, scale.unit * 12) // Larger gap
+			GLOVE_OPENING = Math.min(scale.height * 0.35, scale.unit * 10)
 
 			// Adjust the spawn range to prevent arms from being too close to edges
-			const minY = safePadding + gloveGap * 0.8 // More padding from top
-			const maxY = scale.height - safePadding - gloveGap * 0.8 // More padding from bottom
+			const minY = safePadding + GLOVE_OPENING * 0.8 // More padding from top
+			const maxY = scale.height - safePadding - GLOVE_OPENING * 0.8 // More padding from bottom
 			let y = Math.random() * (maxY - minY) + minY
 
+			// Spawn gloves slightly beyond the right edge to prevent pop-in
 			this.pairs.push({
-				x: scale.width - safePadding,
+				x: scale.width + safePadding,
 				gapY: y,
 				passed: false,
 			})
@@ -533,15 +535,19 @@ function handleInput() {
 	} else if (gameOver && performance.now() - knockoutTime > KNOCKOUT_DELAY) {
 		if (roundsLeft > 0) {
 			totalScore += score
+			currentRound++
 			startGame()
 			gameStarted = true
 			gameOver = false
+			firstAction = false
 			gameStartTime = performance.now()
 			playCheerSound()
 		}
 	} else if (!gameOver) {
 		if (cheeks) {
-			cheeks.velocity = FLAP_SPEED
+			firstAction = true
+			hasEverActed = true
+			cheeks.velocity = CLAP_SPEED
 			squishStartTime = performance.now()
 			playFlapSound()
 		}
@@ -599,9 +605,13 @@ function gameLoop(timestamp) {
 	// Clear the canvas using actual dimensions
 	ctx.clearRect(0, 0, gameCanvas.width, gameCanvas.height)
 
-	// Draw background
-	drawBackground()
+	// Draw background first (always skip ring)
+	drawBackground(true)
 
+	// Draw ring next (for all game states)
+	drawRing()
+
+	// Draw game state specific elements
 	if (!gameStarted) {
 		drawTitleScreen()
 	} else if (gameOver) {
@@ -628,6 +638,9 @@ function gameLoop(timestamp) {
 		// Draw game objects
 		if (gloves) gloves.draw()
 		if (cheeks) cheeks.draw()
+
+		// Draw HUD on top of everything
+		drawHUD()
 	}
 
 	// Apply CRT effect
@@ -641,6 +654,171 @@ function gameLoop(timestamp) {
 
 	// Request next frame
 	requestAnimationFrame(gameLoop)
+}
+
+// Separate ring drawing function
+function drawRing() {
+	const scale = window.gameScale
+	if (!scale) return
+
+	const width = gameCanvas.width
+	const height = gameCanvas.height
+	const unit = scale.unit
+
+	// Ring elements - brought in more from edges
+	const ringTop = unit * 6 // Keep same vertical position
+	const ringBottom = height
+	const ringHeight = ringBottom - ringTop
+
+	// Ring floor - angled to match perspective
+	ctx.fillStyle = '#00CEC4'
+	ctx.beginPath()
+	ctx.moveTo(unit * 2, ringTop)
+	ctx.lineTo(width - unit * 2, ringTop)
+	ctx.lineTo(width * 1.1, ringBottom) // Match right rope angle
+	ctx.lineTo(-width * 0.1, ringBottom) // Match left rope angle
+	ctx.fill()
+
+	// Ring posts - brought in more
+	const postWidth = unit * 0.8
+	const postHeight = unit * 3
+	ctx.fillStyle = '#FFFFFF'
+	ctx.fillRect(unit * 2.5, ringTop - postHeight / 2, postWidth, postHeight)
+	ctx.fillRect(
+		width - unit * 2.5 - postWidth,
+		ringTop - postHeight / 2,
+		postWidth,
+		postHeight
+	)
+
+	// Ring ropes - drawn in order for proper overlapping
+	ctx.strokeStyle = '#FF69B4'
+	ctx.lineWidth = Math.max(unit / 6, 2)
+
+	// Draw all ropes in sequence to create continuous appearance
+	for (let i = 0; i < 3; i++) {
+		const topY = ringTop - postHeight * 0.6 + (i + 1) * (postHeight / 3)
+		const bottomY = ringBottom - i * unit
+
+		// Left side rope first
+		ctx.beginPath()
+		ctx.moveTo(unit * 2.5 + postWidth / 2, topY)
+		ctx.lineTo(-width * 0.1, bottomY)
+		ctx.stroke()
+
+		// Right side rope
+		ctx.beginPath()
+		ctx.moveTo(width - unit * 2.5 - postWidth / 2, topY)
+		ctx.lineTo(width * 1.1, bottomY)
+		ctx.stroke()
+
+		// Top rope connecting the posts
+		ctx.beginPath()
+		ctx.moveTo(unit * 2.5 + postWidth / 2, topY)
+		ctx.lineTo(width - unit * 2.5 - postWidth / 2, topY)
+		ctx.stroke()
+
+		// Bottom rope connecting the extended points
+		ctx.beginPath()
+		ctx.moveTo(-width * 0.1, bottomY)
+		ctx.lineTo(width * 1.1, bottomY)
+		ctx.stroke()
+	}
+}
+
+// Separate HUD drawing function
+function drawHUD() {
+	const scale = window.gameScale
+	if (!scale) return
+
+	const width = gameCanvas.width
+	const height = gameCanvas.height
+	const unit = scale.unit
+
+	// Save current transform and apply new one for HUD
+	ctx.save()
+	ctx.setTransform(1, 0, 0, 1, 0, 0) // Reset transform for HUD to ensure it's always on top
+
+	// Show flashing PRESS SPACE during any round until first action, but only if never acted before
+	if (!firstAction && !hasEverActed && gameStarted && !gameOver) {
+		const promptSize = Math.min(unit * 1.2, width * 0.04)
+		ctx.font = `${promptSize}px "Press Start 2P"`
+		ctx.textAlign = 'center'
+		ctx.fillStyle = Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
+		ctx.fillText('PRESS SPACE', width / 2, height / 2)
+	}
+
+	// HUD bar - moved closer to top with full width
+	const hudHeight = Math.max(height * 0.08, unit * 2.5)
+	const hudY = unit * 0.8 // Reduced top padding
+
+	// Black background for entire HUD
+	ctx.fillStyle = '#000000'
+	ctx.fillRect(0, 0, width, hudHeight + hudY)
+
+	// Scale font size based on HUD height
+	const fontSize = Math.min(hudHeight * 0.4, width * 0.03)
+	ctx.font = `${fontSize}px "Press Start 2P"`
+	ctx.textAlign = 'center'
+
+	// Measure text widths for tight background
+	const pointsText = `POINTS: ${score}`
+	const roundsText = `ROUND: ${currentRound}/3`
+	const textMetrics = ctx.measureText(pointsText)
+	const roundsMetrics = ctx.measureText(roundsText)
+	const padding = fontSize * 0.4
+
+	// Calculate positions to prevent overlap
+	const totalWidth = textMetrics.width + roundsMetrics.width + padding * 4
+	const startX = (width - totalWidth) / 2
+
+	// Points with white background - using same container logic as final score
+	const textHeight = fontSize // Base height of the font
+	const verticalPadding = fontSize * 0.6 // Consistent padding vertically
+	const horizontalPadding = fontSize * 0.8 // Slightly more padding horizontally
+	const pointsBoxWidth = textMetrics.width + horizontalPadding * 2
+	const roundsBoxWidth = roundsMetrics.width + horizontalPadding * 2
+	const boxHeight = textHeight + verticalPadding * 2
+	const boxY = hudY + (hudHeight - boxHeight) / 2
+
+	// White background box for points
+	ctx.fillStyle = '#98FF98'
+	ctx.fillRect(
+		startX,
+		boxY,
+		pointsBoxWidth,
+		boxHeight
+	)
+
+	// Black background box for rounds
+	ctx.fillStyle = '#000000'
+	ctx.fillRect(
+		startX + pointsBoxWidth + padding,
+		boxY,
+		roundsBoxWidth,
+		boxHeight
+	)
+
+	// Draw points and rounds text side by side
+	ctx.textAlign = 'left'
+	ctx.textBaseline = 'middle'
+	
+	// Points text
+	ctx.font = `${fontSize}px "Press Start 2P"` // Ensure font is set before each text
+	ctx.fillStyle = '#000000'
+	ctx.fillText(pointsText, startX + horizontalPadding, boxY + boxHeight / 2)
+	
+	// Rounds text
+	ctx.font = `${fontSize}px "Press Start 2P"` // Ensure font is set before each text
+	ctx.fillStyle = '#FFFFFF'
+	ctx.fillText(
+		roundsText,
+		startX + pointsBoxWidth + padding + horizontalPadding,
+		boxY + boxHeight / 2
+	)
+	ctx.textBaseline = 'alphabetic'
+
+	ctx.restore()
 }
 
 // Drawing functions
@@ -683,99 +861,16 @@ function drawBackground(skipRing = false) {
 		ctx.stroke()
 	}
 
-	// Only show scoreboard during actual gameplay
-	if (gameStarted && !gameOver) {
-		// HUD bar - moved closer to top with full width
-		const hudHeight = Math.max(height * 0.08, unit * 2.5)
-		const hudY = unit * 0.8 // Reduced top padding
-
-		// Black background for entire HUD
-		ctx.fillStyle = '#000000'
-		ctx.fillRect(0, 0, width, hudHeight + hudY)
-
-		// Scale font size based on HUD height
-		const fontSize = Math.min(hudHeight * 0.4, width * 0.03)
-		ctx.font = `${fontSize}px "Press Start 2P"`
-		ctx.textAlign = 'center'
-
-		// Measure text widths for tight background
-		const pointsText = `POINTS: ${score}`
-		const roundsText = `ROUND ${Math.floor(score / 10) + 1}/${roundsLeft}`
-		const textMetrics = ctx.measureText(pointsText)
-		const roundsMetrics = ctx.measureText(roundsText)
-		const padding = fontSize * 0.4 // Reduced padding based on font size
-
-		// Calculate positions to prevent overlap
-		const totalWidth = textMetrics.width + roundsMetrics.width + padding * 4
-		const startX = (width - totalWidth) / 2
-
-		// Points with green background - tighter fit
-		const pointsWidth = textMetrics.width + padding * 2
-		ctx.fillStyle = '#98FF98'
-		ctx.fillRect(startX, hudY + hudHeight * 0.15, pointsWidth, hudHeight * 0.7) // Adjusted height and position
-
-		// Draw points and rounds text side by side
-		ctx.fillStyle = '#000000'
-		ctx.textAlign = 'left'
-		ctx.fillText(pointsText, startX + padding, hudY + hudHeight * 0.65)
-		ctx.fillStyle = '#FFFFFF'
-		ctx.fillText(roundsText, startX + pointsWidth + padding, hudY + hudHeight * 0.65)
-	}
-
-	if (!skipRing) {
-		// Ring elements - adjusted for safe area but arms extend full height
-		const ringTop = unit * 4 // Adjusted to account for new HUD position
-		const ringBottom = height
-		const ringHeight = ringBottom - ringTop
-
-		// Ring floor
-		ctx.fillStyle = '#00CEC4'
-		ctx.fillRect(unit * 0.5, ringTop, width - unit, ringHeight)
-
-		// Ring posts
-		const postWidth = unit * 0.8
-		const postHeight = unit * 3
-		ctx.fillStyle = '#FFFFFF'
-		ctx.fillRect(unit, ringTop - postHeight / 2, postWidth, postHeight)
-		ctx.fillRect(
-			width - unit - postWidth,
-			ringTop - postHeight / 2,
-			postWidth,
-			postHeight
-		)
-
-		// Ring ropes
-		ctx.strokeStyle = '#FF69B4'
-		ctx.lineWidth = Math.max(unit / 6, 2)
-
-		// Top ropes
-		for (let i = 0; i < 3; i++) {
-			const y = ringTop + i * unit
-			ctx.beginPath()
-			ctx.moveTo(unit * 0.5, y)
-			ctx.lineTo(width - unit * 0.5, y)
-			ctx.stroke()
+	// Draw crowd pattern during gameplay
+	if (gameStarted && images.crowdImage) {
+		ctx.globalAlpha = 0.6
+		const crowdHeight = unit * 8 // Height of crowd section
+		const pattern = ctx.createPattern(images.crowdImage, 'repeat')
+		if (pattern) {
+			ctx.fillStyle = pattern
+			ctx.fillRect(0, 0, width, crowdHeight)
 		}
-
-		// Bottom ropes
-		for (let i = 0; i < 3; i++) {
-			const y = ringBottom - i * unit
-			ctx.beginPath()
-			ctx.moveTo(unit * 0.5, y)
-			ctx.lineTo(width - unit * 0.5, y)
-			ctx.stroke()
-		}
-
-		// Side ropes
-		ctx.beginPath()
-		ctx.moveTo(unit + postWidth / 2, ringTop)
-		ctx.lineTo(unit + postWidth / 2, ringBottom)
-		ctx.stroke()
-
-		ctx.beginPath()
-		ctx.moveTo(width - unit - postWidth / 2, ringTop)
-		ctx.lineTo(width - unit - postWidth / 2, ringBottom)
-		ctx.stroke()
+		ctx.globalAlpha = 1.0
 	}
 }
 
@@ -803,16 +898,23 @@ function drawTitleScreen() {
 	ctx.textAlign = 'center'
 
 	// Calculate text sizes first to determine total height
-	const titleSize = Math.min(unit * 2.5, safeWidth / 10)
-	const instructionSize = Math.min(unit * 0.8, safeWidth / 30)
-	const menuSize = Math.min(unit * 1.2, safeWidth / 20)
+	const titleSize = Math.min(unit * 2.5, safeWidth / 10, safeHeight / 8)
+	const instructionSize = Math.min(unit * 0.8, safeWidth / 30, safeHeight / 20)
+	const menuSize = Math.min(unit * 1.2, safeWidth / 20, safeHeight / 15)
 
-	// Calculate total stack height
-	const stackHeight = (
+	// Use unit-based spacing
+	const titleSpacing = unit * 1.5
+	const instructionSpacing = unit * 3
+	const menuSpacing = unit * 2
+
+	// Calculate total stack height with unit-based spacing
+	const stackHeight =
 		titleSize * 2 + // CLAPPY + CHEEKS!!
-		instructionSize * 3 + // Two lines of instructions + spacing
-		menuSize * 3.5 // PRESS SPACE + extra padding (increased from 2.5)
-	)
+		titleSpacing +
+		instructionSize * 2 + // Two lines of instructions
+		instructionSpacing +
+		menuSize + // PRESS SPACE
+		menuSpacing
 
 	// Center the stack vertically in safe area
 	let currentY = safePadding + (safeHeight - stackHeight) / 2
@@ -834,43 +936,104 @@ function drawTitleScreen() {
 	ctx.fillStyle = titleGradient
 	ctx.fillText('CLAPPY', width / 2, currentY)
 	ctx.fillText('CHEEKS!!', width / 2, currentY + titleSize)
-	currentY += titleSize * 2.5
+	currentY += titleSize * 2 + titleSpacing
 
 	// Instructions group
 	ctx.font = `${instructionSize}px "Press Start 2P"`
 	ctx.fillStyle = '#FFFFFF'
-	ctx.fillText('5 ROUNDS PER MATCH', width / 2, currentY)
-	ctx.fillText('DODGE PUNCHES FOR POINTS', width / 2, currentY + instructionSize * 1.5)
-	currentY += instructionSize * 5 // Increased from 4 to add more space before PRESS SPACE
+	ctx.fillText('3 ROUNDS PER MATCH', width / 2, currentY)
+	ctx.fillText(
+		'DODGE PUNCHES FOR POINTS',
+		width / 2,
+		currentY + instructionSize * 1.2
+	)
+	currentY += instructionSize * 2 + instructionSpacing
 
-	// Menu text (PRESS SPACE on one line)
+	// Menu text (PRESS SPACE)
 	ctx.font = `${menuSize}px "Press Start 2P"`
 	if (roundsLeft > 0) {
-		ctx.fillStyle = Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
+		// Draw decorative gloves pointing at PRESS SPACE
+		if (images.armImage) {
+			const gloveSize = menuSize * 2.5
+			const textMetrics = ctx.measureText('PRESS SPACE')
+			const gloveSpacing = textMetrics.width * 2.4
+			const centerX = width / 2
+			const gloveY = currentY - menuSize * 0.8
+
+			// Calculate dimensions for proper centering
+			const gloveWidth = gloveSize
+			const gloveHeight = (gloveSize / images.armImage.width) * images.armImage.height
+
+			// Calculate glove movement based on flashing text timing
+			const moveAmount = Math.floor(performance.now() / 250) % 2 ? unit * 0.4 : 0
+
+			// Left glove
+			ctx.save()
+			ctx.translate(centerX - gloveSpacing / 2 - moveAmount, gloveY)
+			ctx.rotate(Math.PI / 2)
+			ctx.scale(-1, 1)
+			ctx.drawImage(
+				images.armImage,
+				-gloveWidth / 2,
+				-gloveHeight / 2,
+				gloveWidth,
+				gloveHeight
+			)
+			ctx.restore()
+
+			// Right glove
+			ctx.save()
+			ctx.translate(centerX + gloveSpacing / 2 + moveAmount, gloveY)
+			ctx.rotate(-Math.PI / 2)
+			ctx.drawImage(
+				images.armImage,
+				-gloveWidth / 2,
+				-gloveHeight / 2,
+				gloveWidth,
+				gloveHeight
+			)
+			ctx.restore()
+		}
+
+		ctx.fillStyle =
+			Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
 		ctx.fillText('PRESS SPACE', width / 2, currentY)
 	} else {
 		ctx.fillStyle = '#FFFFFF'
 		ctx.fillText('GAME OVER', width / 2, currentY)
 	}
+	currentY += menuSize + menuSpacing
 
 	// Score at bottom of stack if present
 	if (totalScore > 0) {
-		const scoreSize = Math.min(unit * 0.8, safeWidth / 30)
+		const scoreSize = Math.min(unit * 0.8, safeWidth / 30, safeHeight / 20)
 		ctx.font = `${scoreSize}px "Press Start 2P"`
+		const totalScoreText = `TOTAL SCORE: ${totalScore}`
+		const scoreMetrics = ctx.measureText(totalScoreText)
+		const scorePadding = unit * 0.8 // Consistent unit-based padding
+
+		// White background
 		ctx.fillStyle = '#FFFFFF'
-		ctx.fillText(`TOTAL SCORE: ${totalScore}`, width / 2, height - safePadding * 3)
+		ctx.fillRect(
+			width / 2 - scoreMetrics.width / 2 - scorePadding,
+			height - safePadding * 2.5,
+			scoreMetrics.width + scorePadding * 2,
+			scoreSize * 1.4
+		)
+
+		// Score text
+		ctx.fillStyle = '#000000'
+		ctx.fillText(totalScoreText, width / 2, height - safePadding * 2)
 	}
 
 	// Copyright at bottom of safe area
-	const copyrightSize = Math.min(unit * 0.5, safeWidth / 40)
+	const copyrightSize = Math.min(unit * 0.5, safeWidth / 40, safeHeight / 30)
 	ctx.font = `${copyrightSize}px "Press Start 2P"`
-	ctx.fillStyle = '#8888FF' // Lighter, less saturated blue
+	ctx.fillStyle = '#8888FF'
 	ctx.fillText('NOT © 2024 FWD:FWD:FWD:', width / 2, height - safePadding)
 }
 
 function drawGameOverScreen() {
-	drawBackground()
-
 	const scale = window.gameScale
 	if (!scale) return
 
@@ -889,18 +1052,15 @@ function drawGameOverScreen() {
 	const textSize = Math.min(unit * 0.8, width / 30)
 
 	// Calculate total stack height
-	const stackHeight = roundsLeft === 0
-		? (
-			headerSize + // MATCH OVER
-			textSize * 3 // Two lines of scores
-		)
-		: (
-			headerSize + // KNOCKOUT!!
-			textSize * 5 // Two lines of scores + PRESS SPACE + ROUNDS LEFT
-		)
+	const stackHeight =
+		roundsLeft === 0
+			? headerSize + // MATCH OVER
+			  textSize * 3 // Two lines of scores
+			: headerSize + // KNOCKOUT!!
+			  textSize * 5 // Two lines of scores + PRESS SPACE + ROUNDS LEFT
 
-	// Center the stack vertically in safe area
-	let currentY = safePadding + (safeHeight - stackHeight) / 2
+	// Center the stack vertically in safe area but shift up slightly
+	let currentY = safePadding + (safeHeight - stackHeight) / 2 - unit * 2 // Shifted up by 2 units
 
 	// Header group
 	ctx.font = `${headerSize}px "Press Start 2P"`
@@ -908,32 +1068,63 @@ function drawGameOverScreen() {
 
 	if (roundsLeft === 0) {
 		// Match over screen
-		ctx.fillText('MATCH OVER', width / 2, currentY)
-		currentY += headerSize * 2
+		ctx.fillStyle = '#000044'
+		ctx.fillText('KNOCKOUT!!', width / 2, currentY + unit * 3)
+		currentY += headerSize * 1.5 + unit // Reduced from headerSize * 2 + unit * 3
+
+		// Score group with white background
+		ctx.font = `${textSize}px "Press Start 2P"`
+		const finalScoreText = `FINAL SCORE: ${totalScore + score}`
+		const scoreMetrics = ctx.measureText(finalScoreText)
+		
+		// Calculate text dimensions including ascent and descent
+		const textHeight = textSize // Base height of the font
+		const verticalPadding = textSize * 0.6 // Consistent padding vertically
+		const horizontalPadding = textSize * 0.8 // Slightly more padding horizontally
+		const boxWidth = scoreMetrics.width + horizontalPadding * 2
+		const boxHeight = textHeight + verticalPadding * 2
+
+		// White background box - centered both horizontally and vertically
+		ctx.fillStyle = '#FFFFFF'
+		ctx.fillRect(
+			width / 2 - boxWidth / 2,
+			currentY - boxHeight / 2,
+			boxWidth,
+			boxHeight
+		)
+
+		// Score text in blue - centered in the box
+		ctx.fillStyle = '#000044'
+		ctx.textBaseline = 'middle' // Set baseline to middle for vertical centering
+		ctx.fillText(finalScoreText, width / 2, currentY)
+		ctx.textBaseline = 'alphabetic' // Reset baseline to default
+	} else {
+		// Round over screen
+		ctx.fillStyle = '#000044'
+		ctx.fillText('ROUND', width / 2, currentY + unit * 3)
+		ctx.fillText('OVER!!', width / 2, currentY + unit * 5)
+		currentY += headerSize * 3 + unit * 3
 
 		// Score group
-		ctx.font = `${textSize}px "Press Start 2P"`
-		ctx.fillText(`FINAL SCORE: ${totalScore + score}`, width / 2, currentY)
-		ctx.fillText(`ROUNDS COMPLETE: 5`, width / 2, currentY + textSize * 1.5)
-	} else {
-		// Knockout screen
-		ctx.fillStyle = '#000044'
-		ctx.fillText('KNOCKOUT!!', width / 2, currentY)
-		currentY += headerSize * 2
-
-		// Score group - using darkened ring color
-		ctx.fillStyle = '#004A47' // Darker version of #00CEC4
+		ctx.fillStyle = '#004A47'
 		ctx.font = `${textSize}px "Press Start 2P"`
 		ctx.fillText(`ROUND SCORE: ${score}`, width / 2, currentY)
-		ctx.fillText(`TOTAL SCORE: ${totalScore + score}`, width / 2, currentY + textSize * 1.5)
+		ctx.fillText(
+			`TOTAL SCORE: ${totalScore + score}`,
+			width / 2,
+			currentY + textSize * 1.5
+		)
 		currentY += textSize * 4
 
-		// Action group (PRESS SPACE on one line)
-		ctx.fillStyle = Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
-		ctx.fillText('PRESS SPACE', width / 2, currentY)
-		currentY += textSize * 1.5
-		ctx.fillStyle = '#004A47' // Darker ring color for rounds left
-		ctx.fillText(`ROUNDS LEFT: ${roundsLeft - 1}`, width / 2, currentY)
+		// Only show PRESS SPACE after knockout delay
+		if (performance.now() - knockoutTime > KNOCKOUT_DELAY) {
+			ctx.fillStyle =
+				Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
+			ctx.fillText('PRESS SPACE', width / 2, currentY)
+			currentY += textSize * 1.5
+			ctx.fillStyle = '#004A47'
+			ctx.fillText(`ROUNDS LEFT: ${roundsLeft - 1}`, width / 2, currentY)
+		}
 	}
 
 	// Copyright at bottom of safe area
@@ -957,22 +1148,23 @@ function checkCollisions() {
 	}
 
 	for (const pair of gloves.pairs) {
-		const armSize = Math.min(scale.width, scale.height) / 8
-		const gapHalf = gloveGap / 2
+		const armWidth = Math.min(scale.width, scale.height) / 8
+		const armHeight = (armWidth / images.armImage.width) * images.armImage.height
+		const gapHalf = GLOVE_OPENING / 2
 
-		// Updated collision boxes to extend full height
+		// Collision boxes match actual glove dimensions
 		const topGlove = {
-			x: pair.x - armSize / 2,
-			y: 0,
-			width: armSize,
-			height: pair.gapY - gapHalf,
+			x: pair.x - armWidth / 2,
+			y: pair.gapY - gapHalf - armHeight,
+			width: armWidth,
+			height: armHeight
 		}
 
 		const bottomGlove = {
-			x: pair.x - armSize / 2,
+			x: pair.x - armWidth / 2,
 			y: pair.gapY + gapHalf,
-			width: armSize,
-			height: scale.height,
+			width: armWidth,
+			height: armHeight
 		}
 
 		if (
@@ -1011,7 +1203,11 @@ function intersectRect(r1, r2) {
 // Update bounds checking
 function checkBounds() {
 	if (!cheeks || !window.gameScale) return false
-	return cheeks.y < 0 || cheeks.y > window.gameScale.height
+	const outOfBounds = cheeks.y < 0 || cheeks.y > window.gameScale.height
+	if (outOfBounds) {
+		playKnockoutSound()
+	}
+	return outOfBounds
 }
 
 // Wait for DOM to be ready
