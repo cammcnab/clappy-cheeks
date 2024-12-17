@@ -1344,6 +1344,10 @@ function activateCheatMode() {
 	window.gameSpeed = 0.5
 	window.cheatPoints = 10
 
+	// Play Konami sound effect
+	const konamiSound = new Audio('audio/konami.mp3')
+	konamiSound.play().catch(e => console.log('Konami sound failed:', e))
+
 	console.log('Game state updated:', {
 		cheatMode: window.cheatMode,
 		gameSpeed: window.gameSpeed,
