@@ -829,9 +829,9 @@ function drawHUD() {
 	const hudHeight = Math.max(height * 0.08, unit * 2.5)
 	const hudY = unit * 0.8 // Reduced top padding
 
-	// Black background for entire HUD
-	ctx.fillStyle = '#000000'
-	ctx.fillRect(0, 0, width, hudHeight + hudY)
+	// Remove black background for HUD
+	// ctx.fillStyle = '#000000'
+	// ctx.fillRect(0, 0, width, hudHeight + hudY)
 
 	// Scale font size based on HUD height
 	const fontSize = Math.min(hudHeight * 0.4, width * 0.03)
@@ -1014,6 +1014,7 @@ function drawTitleScreen() {
 	ctx.font = `${instructionSize}px "Press Start 2P"`
 	ctx.fillStyle = '#FFFFFF'
 	ctx.fillText('3 ROUNDS PER MATCH', width / 2, currentY)
+	currentY += instructionSize  // Set to exactly 1.0
 	ctx.fillText(
 		'DODGE PUNCHES FOR POINTS',
 		width / 2,
@@ -1144,7 +1145,7 @@ function drawGameOverScreen() {
 		// Match over screen
 		ctx.fillStyle = '#000044'
 		ctx.fillText('KNOCKOUT!!', width / 2, currentY + unit * 3)
-		currentY += headerSize * 1.5 + unit // Reduced from headerSize * 2 + unit * 3
+		currentY += headerSize * 1.5 + unit * 4
 
 		// Score group with white background
 		ctx.font = `${textSize}px "Press Start 2P"`
@@ -1172,12 +1173,18 @@ function drawGameOverScreen() {
 		ctx.textBaseline = 'middle' // Set baseline to middle for vertical centering
 		ctx.fillText(finalScoreText, width / 2, currentY)
 		ctx.textBaseline = 'alphabetic' // Reset baseline to default
+
+		// Add copyright at bottom for knockout screen only
+		const copyrightSize = Math.min(unit * 0.5, width / 40)
+		ctx.font = `${copyrightSize}px "Press Start 2P"`
+		ctx.fillStyle = '#004A47' // Darker ring color to match other text
+		ctx.fillText('NOT © 2024 FWD:FWD:FWD:', width / 2, height - safePadding)
 	} else {
 		// Round over screen
 		ctx.fillStyle = '#000044'
 		ctx.fillText('ROUND', width / 2, currentY + unit * 3)
 		ctx.fillText('OVER!!', width / 2, currentY + unit * 5)
-		currentY += headerSize * 3 + unit * 3
+		currentY += headerSize * 3 + unit * 3  // Restored to original spacing
 
 		// Score group
 		ctx.fillStyle = '#004A47'
@@ -1200,12 +1207,6 @@ function drawGameOverScreen() {
 			ctx.fillText(`ROUNDS LEFT: ${roundsLeft - 1}`, width / 2, currentY)
 		}
 	}
-
-	// Copyright at bottom of safe area
-	const copyrightSize = Math.min(unit * 0.5, width / 40)
-	ctx.font = `${copyrightSize}px "Press Start 2P"`
-	ctx.fillStyle = '#004A47' // Darker ring color to match other text
-	ctx.fillText('NOT © 2024 FWD:FWD:FWD:', width / 2, height - safePadding)
 }
 
 // Collision detection
