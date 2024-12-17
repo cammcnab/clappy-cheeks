@@ -1101,11 +1101,18 @@ function drawTitleScreen() {
 		ctx.fillText(totalScoreText, width / 2, height - safePadding * 2)
 	}
 
-	// Copyright at bottom of safe area
-	const copyrightSize = Math.min(unit * 0.5, safeWidth / 40, safeHeight / 30)
-	ctx.font = `${copyrightSize}px "Press Start 2P"`
-	ctx.fillStyle = '#8888FF'
-	ctx.fillText('NOT © 2024 FWD:FWD:FWD:', width / 2, height - safePadding)
+	// Add cheat mode text if active (in same position as copyright)
+	if (window.cheatMode) {
+		const copyrightSize = Math.min(unit * 0.5, width / 40)
+		ctx.font = `${copyrightSize}px "Press Start 2P"`
+		ctx.fillStyle = Math.floor(performance.now() / 250) % 2 ? '#ff3333' : '#cc0000'
+		ctx.fillText('CHEAT MODE ACTIVATED', width / 2, height - safePadding)
+	} else {
+		const copyrightSize = Math.min(unit * 0.5, width / 40)
+		ctx.font = `${copyrightSize}px "Press Start 2P"`
+		ctx.fillStyle = '#8888FF'
+		ctx.fillText('NOT © 2024 FWD:FWD:FWD:', width / 2, height - safePadding)
+	}
 }
 
 function drawGameOverScreen() {
@@ -1125,6 +1132,7 @@ function drawGameOverScreen() {
 	// Calculate text sizes
 	const headerSize = Math.min(unit * 1.8, width / 15)
 	const textSize = Math.min(unit * 0.8, width / 30)
+	const copyrightSize = Math.min(unit * 0.5, width / 40)
 
 	// Calculate total stack height
 	const stackHeight =
@@ -1174,37 +1182,52 @@ function drawGameOverScreen() {
 		ctx.fillText(finalScoreText, width / 2, currentY)
 		ctx.textBaseline = 'alphabetic' // Reset baseline to default
 
-		// Add copyright at bottom for knockout screen only
-		const copyrightSize = Math.min(unit * 0.5, width / 40)
+		// Add copyright or cheat mode text at bottom
 		ctx.font = `${copyrightSize}px "Press Start 2P"`
-		ctx.fillStyle = '#004A47' // Darker ring color to match other text
-		ctx.fillText('NOT © 2024 FWD:FWD:FWD:', width / 2, height - safePadding)
+		if (window.cheatMode) {
+			ctx.fillStyle = Math.floor(performance.now() / 250) % 2 ? '#ff3333' : '#cc0000'
+			ctx.fillText('CHEAT MODE ACTIVATED', width / 2, height - safePadding)
+		} else {
+			ctx.fillStyle = '#004A47'
+			ctx.fillText('NOT © 2024 FWD:FWD:FWD:', width / 2, height - safePadding)
+		}
 	} else {
 		// Round over screen
 		ctx.fillStyle = '#000044'
 		ctx.fillText('ROUND', width / 2, currentY + unit * 3)
 		ctx.fillText('OVER!!', width / 2, currentY + unit * 5)
-		currentY += headerSize * 3 + unit * 3  // Restored to original spacing
+		currentY += headerSize * 3 + unit * 2  // Reduced spacing here
 
-		// Score group
+		// Score group - all lines with equal spacing
 		ctx.fillStyle = '#004A47'
 		ctx.font = `${textSize}px "Press Start 2P"`
+		const lineSpacing = textSize * 1.8  // Equal spacing between all lines
+		
 		ctx.fillText(`ROUND SCORE: ${score}`, width / 2, currentY)
 		ctx.fillText(
 			`TOTAL SCORE: ${totalScore + score}`,
 			width / 2,
-			currentY + textSize * 1.5
+			currentY + lineSpacing
 		)
-		currentY += textSize * 4
+		ctx.fillText(
+			`ROUNDS LEFT: ${roundsLeft - 1}`,
+			width / 2,
+			currentY + lineSpacing * 2
+		)
+		currentY += lineSpacing * 3
 
 		// Only show PRESS SPACE after knockout delay
 		if (performance.now() - knockoutTime > KNOCKOUT_DELAY) {
 			ctx.fillStyle =
 				Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
 			ctx.fillText('PRESS SPACE', width / 2, currentY)
-			currentY += textSize * 1.5
-			ctx.fillStyle = '#004A47'
-			ctx.fillText(`ROUNDS LEFT: ${roundsLeft - 1}`, width / 2, currentY)
+		}
+
+		// Add cheat mode text if active (in same position as copyright would be)
+		if (window.cheatMode) {
+			ctx.font = `${copyrightSize}px "Press Start 2P"`
+			ctx.fillStyle = Math.floor(performance.now() / 250) % 2 ? '#ff3333' : '#cc0000'
+			ctx.fillText('CHEAT MODE ACTIVATED', width / 2, height - safePadding)
 		}
 	}
 }
@@ -1311,3 +1334,30 @@ document.addEventListener('DOMContentLoaded', async () => {
 		console.error('Failed to initialize game:', error)
 	}
 })
+
+// Separate function to activate cheat mode
+function activateCheatMode() {
+	console.log('Activating cheat mode...')
+	cheatMode = true
+	window.cheatMode = true // Make it accessible to game.js
+	konamiIndex = 0
+	window.gameSpeed = 0.5
+	window.cheatPoints = 10
+
+	console.log('Game state updated:', {
+		cheatMode: window.cheatMode,
+		gameSpeed: window.gameSpeed,
+		cheatPoints: window.cheatPoints,
+	})
+
+	// Flash power LED red rapidly for cheat activation
+	let flashCount = 0
+	const flashInterval = setInterval(() => {
+		if (flashCount >= 6) {
+			clearInterval(flashInterval)
+			return
+		}
+		flashPowerLED('#ff3333', 50)
+		flashCount++
+	}, 100)
+}

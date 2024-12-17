@@ -18,7 +18,7 @@
 			rel="stylesheet"
 		/>
 		<link
-			href="https://fonts.googleapis.com/css2?family=Domine:wght@400;600&display=swap"
+			href="https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@1,700&display=swap"
 			rel="stylesheet"
 		/>
 		<style>
@@ -213,7 +213,7 @@
 				left: 50%;
 				top: 50%;
 				transform: translate(-50%, -50%);
-				font-family: 'Domine', serif;
+				font-family: 'PT Serif', serif;
 				font-size: calc(var(--tv-chin) * 0.19);
 				letter-spacing: 0.12em;
 				background: repeating-linear-gradient(
@@ -236,7 +236,8 @@
 				color: transparent;
 				text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 				opacity: 0.85;
-				font-weight: 600;
+				font-weight: 700;
+				font-style: italic;
 			}
 
 			/* Power indicator group */
@@ -758,35 +759,9 @@
 
 				// Create or update cheat mode indicator
 				let cheatIndicator = document.getElementById('cheatIndicator')
-				if (!cheatIndicator) {
-					cheatIndicator = document.createElement('div')
-					cheatIndicator.id = 'cheatIndicator'
-					cheatIndicator.style.position = 'absolute'
-					cheatIndicator.style.bottom = 'calc(var(--tv-chin) + 20px)'
-					cheatIndicator.style.left = '50%'
-					cheatIndicator.style.transform = 'translateX(-50%)'
-					cheatIndicator.style.fontFamily = '"Press Start 2P", cursive'
-					cheatIndicator.style.fontSize = '16px'
-					cheatIndicator.style.color = '#ff0000'
-					cheatIndicator.style.textShadow = '0 0 10px rgba(255,0,0,0.8)'
-					cheatIndicator.style.zIndex = '100'
-					cheatIndicator.style.animation = 'cheatBlink 1s infinite'
-					document
-						.querySelector('.canvas-container')
-						.appendChild(cheatIndicator)
-					console.log('Cheat indicator created')
-
-					// Add blink animation
-					const style = document.createElement('style')
-					style.textContent = `
-						@keyframes cheatBlink {
-							0%, 100% { opacity: 1; }
-							50% { opacity: 0.3; }
-						}
-					`
-					document.head.appendChild(style)
+				if (cheatIndicator) {
+					cheatIndicator.remove()
 				}
-				cheatIndicator.textContent = 'CHEAT MODE ACTIVATED'
 
 				// Flash power LED red rapidly for cheat activation
 				let flashCount = 0
