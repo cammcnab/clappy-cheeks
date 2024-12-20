@@ -177,7 +177,7 @@ async function init() {
 
 		// Set initial timestamp
 		lastFrameTime = performance.now()
-		
+
 		return true
 	} catch (error) {
 		console.error('Initialization error:', error)
@@ -359,11 +359,13 @@ function startGame() {
 	lastSpeedIncreaseScore = 0
 	firstAction = false
 	// Reset share button state when new game starts
-	window.shareData = null;
+	window.shareData = null
 
 	if (cheeks) {
 		cheeks.x = window.gameScale ? window.gameScale.width / 3 : CANVAS_WIDTH / 3
-		cheeks.y = window.gameScale ? window.gameScale.height / 2 : CANVAS_HEIGHT / 2
+		cheeks.y = window.gameScale
+			? window.gameScale.height / 2
+			: CANVAS_HEIGHT / 2
 		cheeks.velocity = 0
 	}
 
@@ -653,9 +655,9 @@ function gameLoop(timestamp) {
 				const detail = {
 					score: totalScore + score,
 					isGameOver: true,
-					roundsLeft: roundsLeft
-				};
-				window.dispatchEvent(new CustomEvent('gameEnd', { detail }));
+					roundsLeft: roundsLeft,
+				}
+				window.dispatchEvent(new CustomEvent('gameEnd', { detail }))
 			}
 		} else {
 			// Update game objects with time scaling
@@ -670,8 +672,12 @@ function gameLoop(timestamp) {
 			if (gloves) {
 				// Don't move gloves during initial delay
 				if (performance.now() - gameStartTime >= gameStartDelay) {
-					const speed = GLOVE_SPEED * gameSpeed * timeScale * (window.gameScale.width / CANVAS_WIDTH)
-					
+					const speed =
+						GLOVE_SPEED *
+						gameSpeed *
+						timeScale *
+						(window.gameScale.width / CANVAS_WIDTH)
+
 					gloves.pairs.forEach((pair) => {
 						pair.x -= speed
 					})
@@ -1014,7 +1020,7 @@ function drawTitleScreen() {
 	ctx.font = `${instructionSize}px "Press Start 2P"`
 	ctx.fillStyle = '#FFFFFF'
 	ctx.fillText('3 ROUNDS PER MATCH', width / 2, currentY)
-	currentY += instructionSize  // Set to exactly 1.0
+	currentY += instructionSize // Set to exactly 1.0
 	ctx.fillText(
 		'DODGE PUNCHES FOR POINTS',
 		width / 2,
@@ -1105,7 +1111,8 @@ function drawTitleScreen() {
 	if (window.cheatMode) {
 		const copyrightSize = Math.min(unit * 0.5, width / 40)
 		ctx.font = `${copyrightSize}px "Press Start 2P"`
-		ctx.fillStyle = Math.floor(performance.now() / 250) % 2 ? '#ff3333' : '#cc0000'
+		ctx.fillStyle =
+			Math.floor(performance.now() / 250) % 2 ? '#ff3333' : '#cc0000'
 		ctx.fillText('CHEAT MODE ACTIVATED', width / 2, height - safePadding)
 	} else {
 		const copyrightSize = Math.min(unit * 0.5, width / 40)
@@ -1185,7 +1192,8 @@ function drawGameOverScreen() {
 		// Add copyright or cheat mode text at bottom
 		ctx.font = `${copyrightSize}px "Press Start 2P"`
 		if (window.cheatMode) {
-			ctx.fillStyle = Math.floor(performance.now() / 250) % 2 ? '#ff3333' : '#cc0000'
+			ctx.fillStyle =
+				Math.floor(performance.now() / 250) % 2 ? '#ff3333' : '#cc0000'
 			ctx.fillText('CHEAT MODE ACTIVATED', width / 2, height - safePadding)
 		} else {
 			ctx.fillStyle = '#004A47'
@@ -1196,13 +1204,13 @@ function drawGameOverScreen() {
 		ctx.fillStyle = '#000044'
 		ctx.fillText('ROUND', width / 2, currentY + unit * 3)
 		ctx.fillText('OVER!!', width / 2, currentY + unit * 5)
-		currentY += headerSize * 3 + unit * 2  // Reduced spacing here
+		currentY += headerSize * 3 + unit * 2 // Reduced spacing here
 
 		// Score group - all lines with equal spacing
 		ctx.fillStyle = '#004A47'
 		ctx.font = `${textSize}px "Press Start 2P"`
-		const lineSpacing = textSize * 1.8  // Equal spacing between all lines
-		
+		const lineSpacing = textSize * 1.8 // Equal spacing between all lines
+
 		ctx.fillText(`ROUND SCORE: ${score}`, width / 2, currentY)
 		ctx.fillText(
 			`TOTAL SCORE: ${totalScore + score}`,
@@ -1210,7 +1218,7 @@ function drawGameOverScreen() {
 			currentY + lineSpacing
 		)
 		ctx.fillText(
-			`ROUNDS LEFT: ${roundsLeft - 1}`,
+			`ROUNDS LEFT: ${roundsLeft}`,
 			width / 2,
 			currentY + lineSpacing * 2
 		)
@@ -1226,7 +1234,8 @@ function drawGameOverScreen() {
 		// Add cheat mode text if active (in same position as copyright would be)
 		if (window.cheatMode) {
 			ctx.font = `${copyrightSize}px "Press Start 2P"`
-			ctx.fillStyle = Math.floor(performance.now() / 250) % 2 ? '#ff3333' : '#cc0000'
+			ctx.fillStyle =
+				Math.floor(performance.now() / 250) % 2 ? '#ff3333' : '#cc0000'
 			ctx.fillText('CHEAT MODE ACTIVATED', width / 2, height - safePadding)
 		}
 	}
@@ -1272,19 +1281,19 @@ function checkCollisions() {
 		) {
 			playKnockoutSound()
 			// Reset share button state when round ends
-			window.shareData = null;
+			window.shareData = null
 			return true
 		}
 
 		if (!pair.passed && cheeks.x > pair.x) {
-			pair.passed = true;
+			pair.passed = true
 			// Add cheat points if in cheat mode
-			score += window.cheatPoints || 1;
+			score += window.cheatPoints || 1
 
-			// Increase game speed every 3 points up to max speed
-			if (score % 3 === 0 && gameSpeed < MAX_SPEED && !window.cheatMode) {
-				gameSpeed = Math.min(MAX_SPEED, gameSpeed + SPEED_INCREASE);
-				console.log('Speed increased to:', gameSpeed);
+			// Increase game speed every 1 points up to max speed
+			if (score % 1 === 0 && gameSpeed < MAX_SPEED && !window.cheatMode) {
+				gameSpeed = Math.min(MAX_SPEED, gameSpeed + SPEED_INCREASE)
+				console.log('Speed increased to:', gameSpeed)
 			}
 		}
 	}
@@ -1309,7 +1318,7 @@ function checkBounds() {
 	if (outOfBounds) {
 		playKnockoutSound()
 		// Reset share button state when round ends
-		window.shareData = null;
+		window.shareData = null
 	}
 	return outOfBounds
 }
@@ -1320,7 +1329,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 	try {
 		// Wait for power-on sequence to complete if it exists
 		if (window.powerOnComplete) {
-			await window.powerOnComplete;
+			await window.powerOnComplete
 		}
 
 		const initialized = await init()
@@ -1346,7 +1355,7 @@ function activateCheatMode() {
 
 	// Play Konami sound effect
 	const konamiSound = new Audio('audio/konami.mp3')
-	konamiSound.play().catch(e => console.log('Konami sound failed:', e))
+	konamiSound.play().catch((e) => console.log('Konami sound failed:', e))
 
 	console.log('Game state updated:', {
 		cheatMode: window.cheatMode,
