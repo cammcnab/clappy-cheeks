@@ -107,11 +107,43 @@ const fragmentShaderSource = `
 class CRTEffect {
 	constructor(canvas) {
 		this.canvas = canvas
-		this.gl = canvas.getContext('webgl')
+
+		// Try to get WebGL2 context first, then fall back to WebGL1
+		this.gl =
+			canvas.getContext('webgl2', {
+				alpha: true,
+				antialias: false,
+				depth: false,
+				preserveDrawingBuffer: false,
+				powerPreference: 'high-performance',
+				failIfMajorPerformanceCaveat: false, // Important for mobile support
+			}) ||
+			canvas.getContext('webgl', {
+				alpha: true,
+				antialias: false,
+				depth: false,
+				preserveDrawingBuffer: false,
+				powerPreference: 'high-performance',
+				failIfMajorPerformanceCaveat: false, // Important for mobile support
+			})
+
 		if (!this.gl) {
 			console.error('WebGL not supported')
 			return
 		}
+
+		// Log WebGL context info
+		console.log('WebGL context:', {
+			version: this.gl instanceof WebGL2RenderingContext ? '2.0' : '1.0',
+			vendor: this.gl.getParameter(this.gl.VENDOR),
+			renderer: this.gl.getParameter(this.gl.RENDERER),
+			maxTextureSize: this.gl.getParameter(this.gl.MAX_TEXTURE_SIZE),
+		})
+
+		// Handle high DPI displays
+		this.handleResize = this.handleResize.bind(this)
+		window.addEventListener('resize', this.handleResize)
+		this.handleResize()
 
 		this.initShaders()
 		this.initBuffers()
@@ -119,6 +151,33 @@ class CRTEffect {
 
 		// Start time for animation effects
 		this.startTime = Date.now()
+	}
+
+	handleResize() {
+		if (!this.canvas || !this.gl) return
+
+		const dpr = window.devicePixelRatio || 1
+		const displayWidth = Math.floor(this.canvas.clientWidth * dpr)
+		const displayHeight = Math.floor(this.canvas.clientHeight * dpr)
+
+		// Only update if dimensions have changed
+		if (
+			this.canvas.width !== displayWidth ||
+			this.canvas.height !== displayHeight
+		) {
+			// Set canvas buffer size
+			this.canvas.width = displayWidth
+			this.canvas.height = displayHeight
+
+			// Update WebGL viewport
+			this.gl.viewport(0, 0, displayWidth, displayHeight)
+
+			console.log('CRT canvas resized:', {
+				displaySize: `${this.canvas.clientWidth}x${this.canvas.clientHeight}`,
+				actualSize: `${displayWidth}x${displayHeight}`,
+				dpr: dpr,
+			})
+		}
 	}
 
 	initShaders() {
@@ -207,28 +266,40 @@ class CRTEffect {
 
 	render(sourceCanvas) {
 		const gl = this.gl
+		if (!gl) return
 
-		// Update texture with source canvas
-		gl.bindTexture(gl.TEXTURE_2D, this.texture)
-		gl.texImage2D(
-			gl.TEXTURE_2D,
-			0,
-			gl.RGBA,
-			gl.RGBA,
-			gl.UNSIGNED_BYTE,
-			sourceCanvas
-		)
+		// Update canvas size if needed
+		this.handleResize()
 
-		// Set viewport and clear
+		// Clear and set viewport
 		gl.viewport(0, 0, gl.canvas.width, gl.canvas.height)
+		gl.clearColor(0.0, 0.0, 0.0, 1.0)
 		gl.clear(gl.COLOR_BUFFER_BIT)
 
 		// Use shader program
 		gl.useProgram(this.program)
 
-		// Set uniforms
+		// Update uniforms
 		gl.uniform2f(this.resolutionLocation, gl.canvas.width, gl.canvas.height)
 		gl.uniform1f(this.timeLocation, Date.now() - this.startTime)
+
+		// Update texture with source canvas
+		gl.activeTexture(gl.TEXTURE0)
+		gl.bindTexture(gl.TEXTURE_2D, this.texture)
+
+		try {
+			gl.texImage2D(
+				gl.TEXTURE_2D,
+				0,
+				gl.RGBA,
+				gl.RGBA,
+				gl.UNSIGNED_BYTE,
+				sourceCanvas
+			)
+		} catch (error) {
+			console.error('Error updating texture:', error)
+			return
+		}
 
 		// Set up position attribute
 		gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer)
@@ -240,8 +311,18 @@ class CRTEffect {
 		gl.enableVertexAttribArray(this.texcoordLocation)
 		gl.vertexAttribPointer(this.texcoordLocation, 2, gl.FLOAT, false, 0, 0)
 
+		// Enable blending for proper alpha handling
+		gl.enable(gl.BLEND)
+		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+
 		// Draw
 		gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+
+		// Clean up
+		gl.disableVertexAttribArray(this.positionLocation)
+		gl.disableVertexAttribArray(this.texcoordLocation)
+		gl.bindBuffer(gl.ARRAY_BUFFER, null)
+		gl.bindTexture(gl.TEXTURE_2D, null)
 	}
 }
 

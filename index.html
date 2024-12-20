@@ -128,6 +128,10 @@
 				background: #000000;
 				box-shadow: inset 0 2px 5px rgba(255, 255, 255, 0.1),
 					inset 0 0 20px rgba(0, 0, 0, 0.9);
+				touch-action: none;
+				-webkit-touch-callout: none;
+				-webkit-user-select: none;
+				user-select: none;
 			}
 
 			/* Game wrapper */
@@ -143,11 +147,14 @@
 				overflow: hidden;
 				background: #000000;
 				border-radius: calc(var(--bezel-radius) * 0.85);
+				touch-action: none;
+				-webkit-touch-callout: none;
+				-webkit-user-select: none;
+				user-select: none;
 			}
 
-			/* Game and effect canvases */
-			#gameCanvas,
-			#effectCanvas {
+			/* Game canvas */
+			#gameCanvas {
 				position: absolute;
 				width: 100%;
 				height: 100%;
@@ -166,16 +173,12 @@
 					black 85%,
 					transparent 100%
 				);
-			}
-
-			#gameCanvas {
 				image-rendering: pixelated;
+				touch-action: none;
+				-webkit-touch-callout: none;
+				-webkit-user-select: none;
+				user-select: none;
 				z-index: 1;
-			}
-
-			#effectCanvas {
-				pointer-events: none;
-				z-index: 2;
 			}
 
 			/* Control panel area */
@@ -1081,6 +1084,40 @@
 					width: 72px;
 				}
 			}
+
+			/* Mobile optimizations */
+			@media (max-width: 768px) {
+				.canvas-container {
+					inset: calc(var(--tv-padding) * 0.5);
+				}
+
+				#gameCanvas {
+					will-change: transform;
+					backface-visibility: hidden;
+					perspective: 1000;
+					transform: translateZ(0);
+				}
+
+				.game-wrapper {
+					will-change: transform;
+					backface-visibility: hidden;
+					perspective: 1000;
+					transform: translateZ(0);
+				}
+			}
+
+			/* Prevent iOS overscroll */
+			html,
+			body {
+				position: fixed;
+				overflow: hidden;
+				width: 100%;
+				height: 100%;
+				touch-action: none;
+				-webkit-overflow-scrolling: none;
+				overscroll-behavior: none;
+				background: #000;
+			}
 		</style>
 	</head>
 	<body>
@@ -1090,7 +1127,6 @@
 					<div class="canvas-container">
 						<div class="game-wrapper">
 							<canvas id="gameCanvas"></canvas>
-							<canvas id="effectCanvas"></canvas>
 						</div>
 					</div>
 				</div>

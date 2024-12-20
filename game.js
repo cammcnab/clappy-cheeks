@@ -1,6 +1,11 @@
 // Import CRT effect
 import { CRTEffect } from './shaders.js'
 
+// Game constants
+const CHEEKS_SIZE = 32 // Base size for cheeks sprite
+const GRAVITY = 0.4
+const CLAP_SPEED = -8.0
+
 // Early mobile detection - moved to top before any other code
 function isTouchDevice() {
 	return (
@@ -29,11 +34,6 @@ let audio = {
 }
 
 // Constants
-const CANVAS_WIDTH = 480
-const CANVAS_HEIGHT = 720
-const GRAVITY = 0.5
-const CLAP_SPEED = -8
-const CHEEKS_SIZE = 25
 const GLOVE_WIDTH = 50
 let GLOVE_OPENING = 250
 const GLOVE_SET_GAP = 0.65 // Percentage of screen width between arm sets
@@ -44,10 +44,8 @@ const MAX_SPEED = 1.6
 
 // Game variables
 let gameCanvas
-let ctx
-let effectCanvas
+let gl
 let crtEffect
-let wrapper
 let monitorFrame
 let gameStarted = false
 let gameOver = false
@@ -64,18 +62,29 @@ let lastSpeedIncreaseScore = 0
 let mouseX = 0
 let mouseY = 0
 let isHandlingClick = false
-let crtEffectInitialized = false
 let squishStartTime = 0
 let firstAction = false
 let hasEverActed = false
 const SQUISH_DURATION = 100
+
+// Initialize game scale
+window.gameScale = {
+	x: window.innerWidth,
+	y: window.innerHeight,
+	min: Math.min(window.innerWidth, window.innerHeight),
+	max: Math.max(window.innerWidth, window.innerHeight),
+	unit: Math.min(window.innerWidth, window.innerHeight) / 20,
+	width: window.innerWidth,
+	height: window.innerHeight,
+	dpr: window.devicePixelRatio || 1,
+}
 
 // Initialize function
 async function init() {
 	console.log('Initializing game components...')
 
 	try {
-		// Get canvas elements and monitor frame
+		// Get canvas element
 		gameCanvas = document.getElementById('gameCanvas')
 		monitorFrame = document.querySelector('.monitor-frame')
 
@@ -87,15 +96,16 @@ async function init() {
 			throw new Error('Monitor frame not found')
 		}
 
-		// Get context with explicit pixel format
-		ctx = gameCanvas.getContext('2d', {
-			alpha: false,
-			desynchronized: true,
-			preserveDrawingBuffer: false,
-		})
-
-		if (!ctx) {
-			throw new Error('Could not get canvas context')
+		// Initialize game scale
+		window.gameScale = {
+			x: window.innerWidth,
+			y: window.innerHeight,
+			min: Math.min(window.innerWidth, window.innerHeight),
+			max: Math.max(window.innerWidth, window.innerHeight),
+			unit: Math.min(window.innerWidth, window.innerHeight) / 20,
+			width: window.innerWidth,
+			height: window.innerHeight,
+			dpr: window.devicePixelRatio || 1,
 		}
 
 		// Set up canvas container
@@ -109,58 +119,41 @@ async function init() {
 			container.style.justifyContent = 'center'
 			container.style.alignItems = 'center'
 			container.style.overflow = 'hidden'
-			container.style.touchAction = 'manipulation'
 			container.style.width = '100%'
 			container.style.height = '100%'
+			container.style.touchAction = 'none'
+			container.style.webkitTouchCallout = 'none'
+			container.style.webkitUserSelect = 'none'
+			container.style.userSelect = 'none'
 		}
 
-		// Set canvas styles - simplified positioning
+		// Set canvas styles
 		gameCanvas.style.position = 'absolute'
 		gameCanvas.style.width = '100%'
 		gameCanvas.style.height = '100%'
-		gameCanvas.style.imageRendering = 'pixelated'
-		gameCanvas.style.touchAction = 'manipulation'
+		gameCanvas.style.touchAction = 'none'
 		gameCanvas.style.webkitTapHighlightColor = 'transparent'
 		gameCanvas.style.userSelect = 'none'
 		gameCanvas.style.webkitUserSelect = 'none'
+		gameCanvas.style.msTouchAction = 'none'
+		gameCanvas.style.msContentZooming = 'none'
 
-		// Initialize CRT effect
-		try {
-			effectCanvas = document.createElement('canvas')
-			effectCanvas.id = 'effectCanvas'
-			effectCanvas.style.position = 'absolute'
-			effectCanvas.style.width = '100%'
-			effectCanvas.style.height = '100%'
-			effectCanvas.style.pointerEvents = 'none'
-			effectCanvas.style.zIndex = '2'
-			effectCanvas.style.transform = 'scale(1.1)'
-			effectCanvas.style.borderRadius = `calc(var(--bezel-radius) * 2.5)`
-			if (container) {
-				container.appendChild(effectCanvas)
-			}
-
-			// Set initial canvas dimensions
-			handleResize()
-
-			// Initialize CRT effect only if WebGL is available
-			if (effectCanvas.getContext('webgl')) {
-				crtEffect = new CRTEffect(effectCanvas)
-				console.log('CRT effect initialized')
-			} else {
-				console.log('WebGL not available, skipping CRT effect')
-			}
-		} catch (error) {
-			console.error('Failed to initialize CRT effect:', error)
-			// Continue without CRT effect
-			crtEffect = null
+		// Initialize WebGL context with CRT effect
+		crtEffect = new CRTEffect(gameCanvas)
+		if (!crtEffect || !crtEffect.gl) {
+			throw new Error('Could not initialize WebGL context')
 		}
 
-		// Add resize handler with debouncing
-		let resizeTimeout
-		window.addEventListener('resize', () => {
-			clearTimeout(resizeTimeout)
-			resizeTimeout = setTimeout(handleResize, 100)
-		})
+		// Use the WebGL context for all rendering
+		gl = crtEffect.gl
+		console.log('WebGL context initialized')
+
+		// Set initial canvas dimensions
+		handleResize()
+
+		// Add resize event listeners
+		window.addEventListener('resize', handleResize)
+		window.addEventListener('orientationchange', handleResize)
 
 		// Rest of initialization
 		console.log('Loading game assets...')
@@ -169,11 +162,10 @@ async function init() {
 		await initAudio()
 		console.log('Audio initialized')
 		initGameObjects()
-		console.log('Game objects initialized')
-		initInputHandlers()
 		console.log('Input handlers initialized')
-		startGame()
+		initInputHandlers()
 		console.log('Game started')
+		startGame()
 
 		// Set initial timestamp
 		lastFrameTime = performance.now()
@@ -189,85 +181,70 @@ async function init() {
 function handleResize() {
 	if (!gameCanvas || !monitorFrame) return
 
-	// Get container dimensions instead of monitor frame
+	// Get container dimensions
 	const container = gameCanvas.parentElement
 	if (!container) return
 
-	const containerRect = container.getBoundingClientRect()
-	const containerWidth = containerRect.width
-	const containerHeight = containerRect.height
+	// Force a small delay to ensure proper dimensions after orientation change
+	setTimeout(() => {
+		const containerRect = container.getBoundingClientRect()
+		const containerWidth = containerRect.width
+		const containerHeight = containerRect.height
 
-	// Add padding to dimensions to account for scale
-	const scalePadding = 0.1 // 10% padding for 1.1 scale
-	const paddedWidth = containerWidth * (1 + scalePadding)
-	const paddedHeight = containerHeight * (1 + scalePadding)
+		// Calculate device pixel ratio
+		const dpr = window.devicePixelRatio || 1
 
-	// Update canvas dimensions to match container plus padding
-	gameCanvas.width = paddedWidth
-	gameCanvas.height = paddedHeight
+		// Set canvas dimensions to match container
+		const width = containerWidth
+		const height = containerHeight
 
-	// Update effect canvas if it exists
-	if (effectCanvas) {
-		effectCanvas.width = paddedWidth
-		effectCanvas.height = paddedHeight
-	}
+		// Set display size (CSS pixels)
+		gameCanvas.style.width = `${width}px`
+		gameCanvas.style.height = `${height}px`
 
-	// Calculate new base unit for responsive UI sizing
-	const baseUnit = Math.min(containerWidth, containerHeight) / 20
+		// Set actual size in memory (scaled for DPI)
+		gameCanvas.width = Math.floor(width * dpr)
+		gameCanvas.height = Math.floor(height * dpr)
 
-	// Update game scale factors for responsive drawing
-	window.gameScale = {
-		x: paddedWidth / CANVAS_WIDTH,
-		y: paddedHeight / CANVAS_HEIGHT,
-		min: Math.min(paddedWidth / CANVAS_WIDTH, paddedHeight / CANVAS_HEIGHT),
-		max: Math.max(paddedWidth / CANVAS_WIDTH, paddedHeight / CANVAS_HEIGHT),
-		unit: baseUnit,
-		width: paddedWidth,
-		height: paddedHeight,
-	}
+		// Calculate new base unit for responsive UI sizing
+		const baseUnit = Math.min(width, height) / 20
 
-	// Center the game objects to account for padding
-	const offsetX = (paddedWidth - containerWidth) / 2
-	const offsetY = (paddedHeight - containerHeight) / 2
-
-	// Update game object positions for new dimensions
-	if (cheeks) {
-		// Keep cheeks at relative X position but account for padding
-		cheeks.x = containerWidth / 3 + offsetX
-		if (!gameStarted) {
-			cheeks.y = containerHeight / 2 + offsetY
+		// Update game scale factors for responsive drawing
+		window.gameScale = {
+			x: width,
+			y: height,
+			min: Math.min(width, height),
+			max: Math.max(width, height),
+			unit: baseUnit,
+			width: width,
+			height: height,
+			dpr: dpr,
 		}
-	}
 
-	// Update glove gaps and positions
-	GLOVE_OPENING = baseUnit * 8
+		// Update game object positions for new dimensions
+		if (cheeks) {
+			cheeks.x = width / 3
+			if (!gameStarted) {
+				cheeks.y = height / 2
+			}
+		}
 
-	// Set canvas styles to fill container
-	gameCanvas.style.position = 'absolute'
-	gameCanvas.style.width = '100%'
-	gameCanvas.style.height = '100%'
-	gameCanvas.style.imageRendering = 'pixelated'
-	gameCanvas.style.transform = 'scale(1.1)'
-	gameCanvas.style.transformOrigin = 'center center'
+		// Update glove gaps and positions
+		GLOVE_OPENING = baseUnit * 8
 
-	// Set effect canvas styles to match game canvas
-	if (effectCanvas) {
-		effectCanvas.style.position = 'absolute'
-		effectCanvas.style.width = '100%'
-		effectCanvas.style.height = '100%'
-		effectCanvas.style.pointerEvents = 'none'
-		effectCanvas.style.zIndex = '2'
-		effectCanvas.style.transform = 'scale(1.1)'
-		effectCanvas.style.transformOrigin = 'center center'
-	}
+		// Update WebGL viewport
+		if (gl) {
+			gl.viewport(0, 0, gameCanvas.width, gameCanvas.height)
+		}
 
-	console.log(
-		'Canvas resized:',
-		containerWidth,
-		containerHeight,
-		'Base unit:',
-		baseUnit
-	)
+		console.log('Canvas resized:', {
+			containerSize: `${containerWidth}x${containerHeight}`,
+			canvasSize: `${width}x${height}`,
+			actualSize: `${gameCanvas.width}x${gameCanvas.height}`,
+			dpr: dpr,
+			baseUnit: baseUnit,
+		})
+	}, 100)
 }
 
 // Initialize audio
@@ -410,7 +387,7 @@ function initGameObjects() {
 		x: safePadding + safeWidth / 3,
 		y: scale.height / 2,
 		velocity: 0,
-		draw() {
+		draw(ctx) {
 			if (!images.cheeksImage || !window.gameScale) return
 			const scale = window.gameScale
 
@@ -459,7 +436,7 @@ function initGameObjects() {
 
 	gloves = {
 		pairs: [],
-		draw() {
+		draw(ctx) {
 			if (!images.armImage || !window.gameScale) return
 			const scale = window.gameScale
 
@@ -598,11 +575,17 @@ function initInputHandlers() {
 
 	// Mouse/touch controls with better mobile handling
 	if (gameCanvas) {
-		// Prevent default behaviors
+		// Prevent all default touch behaviors
+		gameCanvas.addEventListener('touchstart', (e) => e.preventDefault(), {
+			passive: false,
+		})
 		gameCanvas.addEventListener('touchmove', (e) => e.preventDefault(), {
 			passive: false,
 		})
-		gameCanvas.addEventListener('touchstart', (e) => e.preventDefault(), {
+		gameCanvas.addEventListener('touchend', (e) => e.preventDefault(), {
+			passive: false,
+		})
+		gameCanvas.addEventListener('touchcancel', (e) => e.preventDefault(), {
 			passive: false,
 		})
 
@@ -620,37 +603,58 @@ function initInputHandlers() {
 			}
 			lastTap = currentTime
 		})
+
+		// Prevent scrolling on mobile
+		document.body.style.overflow = 'hidden'
+		document.documentElement.style.overflow = 'hidden'
+		document.body.style.position = 'fixed'
+		document.body.style.width = '100%'
+		document.body.style.height = '100%'
 	}
 }
 
 // Game loop
 function gameLoop(timestamp) {
-	if (!ctx || !gameCanvas) {
-		console.error('Canvas context not available')
+	if (!gl || !gameCanvas || !crtEffect || !window.gameScale) {
+		console.error('Required components not available:', {
+			gl: !!gl,
+			gameCanvas: !!gameCanvas,
+			crtEffect: !!crtEffect,
+			gameScale: !!window.gameScale,
+		})
+		requestAnimationFrame(gameLoop)
 		return
 	}
 
 	try {
-		// Calculate delta time and cap it to prevent huge jumps
-		const deltaTime = Math.min(timestamp - lastFrameTime, 32) // Cap at ~30 FPS worth of time
-		const timeScale = deltaTime / 16.667 // Scale relative to 60 FPS
+		// Calculate delta time and cap it
+		const deltaTime = Math.min(timestamp - lastFrameTime, 32)
+		const timeScale = deltaTime / 16.667
 		lastFrameTime = timestamp
 
-		// Clear the canvas using actual dimensions
-		ctx.clearRect(0, 0, gameCanvas.width, gameCanvas.height)
+		// Clear the canvas
+		gl.clear(gl.COLOR_BUFFER_BIT)
 
-		// Draw background first (always skip ring)
-		drawBackground(true)
+		// Create an offscreen canvas for 2D rendering
+		const offscreenCanvas = document.createElement('canvas')
+		offscreenCanvas.width = gameCanvas.width
+		offscreenCanvas.height = gameCanvas.height
+		const ctx = offscreenCanvas.getContext('2d')
 
-		// Draw ring next (for all game states)
-		drawRing()
+		if (!ctx) {
+			console.error('Could not get 2D context')
+			return
+		}
 
-		// Draw game state specific elements
+		// Set up the transformation for high DPI
+		ctx.save()
+		ctx.scale(window.gameScale.dpr, window.gameScale.dpr)
+
+		// Draw game elements to offscreen canvas
 		if (!gameStarted) {
-			drawTitleScreen()
+			drawTitleScreen(ctx)
 		} else if (gameOver) {
-			drawGameOverScreen()
-			// Enable share button when game is over
+			drawGameOverScreen(ctx)
 			if (window.onGameEnd) {
 				const detail = {
 					score: totalScore + score,
@@ -660,6 +664,9 @@ function gameLoop(timestamp) {
 				window.dispatchEvent(new CustomEvent('gameEnd', { detail }))
 			}
 		} else {
+			// Draw background
+			drawBackground(ctx)
+
 			// Update game objects with time scaling
 			if (cheeks) {
 				cheeks.velocity += GRAVITY * gameSpeed * timeScale
@@ -670,242 +677,62 @@ function gameLoop(timestamp) {
 			}
 
 			if (gloves) {
-				// Don't move gloves during initial delay
 				if (performance.now() - gameStartTime >= gameStartDelay) {
 					const speed =
 						GLOVE_SPEED *
 						gameSpeed *
 						timeScale *
-						(window.gameScale.width / CANVAS_WIDTH)
-
+						(window.gameScale.width / 1000)
 					gloves.pairs.forEach((pair) => {
 						pair.x -= speed
 					})
 
 					gloves.pairs = gloves.pairs.filter((pair) => pair.x + GLOVE_WIDTH > 0)
 
-					// Increase spacing between arm pairs
-					const minSpacing = window.gameScale.width * GLOVE_SET_GAP
 					if (
 						gloves.pairs.length === 0 ||
 						gloves.pairs[gloves.pairs.length - 1].x <
-							window.gameScale.width - minSpacing
+							window.gameScale.width * GLOVE_SET_GAP
 					) {
 						gloves.spawn()
 					}
 				}
 			}
 
-			// Check collisions
-			if (checkCollisions()) {
-				gameOver = true
-				knockoutTime = performance.now()
-				roundsLeft--
-			}
-
-			// Check bounds
-			if (checkBounds()) {
+			// Check collisions and bounds
+			if (checkCollisions() || checkBounds()) {
 				gameOver = true
 				knockoutTime = performance.now()
 				roundsLeft--
 			}
 
 			// Draw game objects
-			if (gloves) gloves.draw()
-			if (cheeks) cheeks.draw()
-
-			// Draw HUD on top of everything
-			drawHUD()
+			if (gloves) gloves.draw(ctx)
+			if (cheeks) cheeks.draw(ctx)
+			drawHUD(ctx)
 		}
 
-		// Apply CRT effect only if available
-		if (crtEffect && crtEffect.gl) {
-			try {
-				crtEffect.render(gameCanvas)
-			} catch (error) {
-				console.error('CRT effect error:', error)
-				// Disable CRT effect if it fails
-				crtEffect = null
-			}
-		}
+		ctx.restore()
+
+		// Apply CRT effect using the offscreen canvas
+		crtEffect.render(offscreenCanvas)
 
 		// Request next frame
 		requestAnimationFrame(gameLoop)
 	} catch (error) {
 		console.error('Game loop error:', error)
-		// Try to recover by requesting next frame
 		requestAnimationFrame(gameLoop)
 	}
 }
 
-// Separate ring drawing function
-function drawRing() {
-	const scale = window.gameScale
-	if (!scale) return
-
-	const width = gameCanvas.width
-	const height = gameCanvas.height
-	const unit = scale.unit
-
-	// Ring elements - brought in more from edges
-	const ringTop = unit * 6 // Keep same vertical position
-	const ringBottom = height
-	const ringHeight = ringBottom - ringTop
-
-	// Ring floor - angled to match perspective
-	ctx.fillStyle = '#00CEC4'
-	ctx.beginPath()
-	ctx.moveTo(unit * 2, ringTop)
-	ctx.lineTo(width - unit * 2, ringTop)
-	ctx.lineTo(width * 1.1, ringBottom) // Match right rope angle
-	ctx.lineTo(-width * 0.1, ringBottom) // Match left rope angle
-	ctx.fill()
-
-	// Ring posts - brought in more
-	const postWidth = unit * 0.8
-	const postHeight = unit * 3
-	ctx.fillStyle = '#FFFFFF'
-	ctx.fillRect(unit * 2.5, ringTop - postHeight / 2, postWidth, postHeight)
-	ctx.fillRect(
-		width - unit * 2.5 - postWidth,
-		ringTop - postHeight / 2,
-		postWidth,
-		postHeight
-	)
-
-	// Ring ropes - drawn in order for proper overlapping
-	ctx.strokeStyle = '#FF69B4'
-	ctx.lineWidth = Math.max(unit / 6, 2)
-
-	// Draw all ropes in sequence to create continuous appearance
-	for (let i = 0; i < 3; i++) {
-		const topY = ringTop - postHeight * 0.6 + (i + 1) * (postHeight / 3)
-		const bottomY = ringBottom - i * unit
-
-		// Left side rope first
-		ctx.beginPath()
-		ctx.moveTo(unit * 2.5 + postWidth / 2, topY)
-		ctx.lineTo(-width * 0.1, bottomY)
-		ctx.stroke()
-
-		// Right side rope
-		ctx.beginPath()
-		ctx.moveTo(width - unit * 2.5 - postWidth / 2, topY)
-		ctx.lineTo(width * 1.1, bottomY)
-		ctx.stroke()
-
-		// Top rope connecting the posts
-		ctx.beginPath()
-		ctx.moveTo(unit * 2.5 + postWidth / 2, topY)
-		ctx.lineTo(width - unit * 2.5 - postWidth / 2, topY)
-		ctx.stroke()
-
-		// Bottom rope connecting the extended points
-		ctx.beginPath()
-		ctx.moveTo(-width * 0.1, bottomY)
-		ctx.lineTo(width * 1.1, bottomY)
-		ctx.stroke()
-	}
-}
-
-// Separate HUD drawing function
-function drawHUD() {
-	const scale = window.gameScale
-	if (!scale) return
-
-	const width = gameCanvas.width
-	const height = gameCanvas.height
-	const unit = scale.unit
-
-	// Save current transform and apply new one for HUD
-	ctx.save()
-	ctx.setTransform(1, 0, 0, 1, 0, 0) // Reset transform for HUD to ensure it's always on top
-
-	// Show flashing PRESS SPACE during any round until first action, but only if never acted before
-	if (!firstAction && !hasEverActed && gameStarted && !gameOver) {
-		const promptSize = Math.min(unit * 1.2, width * 0.04)
-		ctx.font = `${promptSize}px "Press Start 2P"`
-		ctx.textAlign = 'center'
-		ctx.fillStyle =
-			Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
-		ctx.fillText('PRESS SPACE', width / 2, height / 2)
-	}
-
-	// HUD bar - moved closer to top with full width
-	const hudHeight = Math.max(height * 0.08, unit * 2.5)
-	const hudY = unit * 0.8 // Reduced top padding
-
-	// Remove black background for HUD
-	// ctx.fillStyle = '#000000'
-	// ctx.fillRect(0, 0, width, hudHeight + hudY)
-
-	// Scale font size based on HUD height
-	const fontSize = Math.min(hudHeight * 0.4, width * 0.03)
-	ctx.font = `${fontSize}px "Press Start 2P"`
-	ctx.textAlign = 'center'
-
-	// Measure text widths for tight background
-	const pointsText = `POINTS: ${score}`
-	const roundsText = `ROUND: ${currentRound}/3`
-	const textMetrics = ctx.measureText(pointsText)
-	const roundsMetrics = ctx.measureText(roundsText)
-	const padding = fontSize * 0.4
-
-	// Calculate positions to prevent overlap
-	const totalWidth = textMetrics.width + roundsMetrics.width + padding * 4
-	const startX = (width - totalWidth) / 2
-
-	// Points with white background - using same container logic as final score
-	const textHeight = fontSize // Base height of the font
-	const verticalPadding = fontSize * 0.6 // Consistent padding vertically
-	const horizontalPadding = fontSize * 0.8 // Slightly more padding horizontally
-	const pointsBoxWidth = textMetrics.width + horizontalPadding * 2
-	const roundsBoxWidth = roundsMetrics.width + horizontalPadding * 2
-	const boxHeight = textHeight + verticalPadding * 2
-	const boxY = hudY + (hudHeight - boxHeight) / 2
-
-	// White background box for points
-	ctx.fillStyle = '#98FF98'
-	ctx.fillRect(startX, boxY, pointsBoxWidth, boxHeight)
-
-	// Black background box for rounds
-	ctx.fillStyle = '#000000'
-	ctx.fillRect(
-		startX + pointsBoxWidth + padding,
-		boxY,
-		roundsBoxWidth,
-		boxHeight
-	)
-
-	// Draw points and rounds text side by side
-	ctx.textAlign = 'left'
-	ctx.textBaseline = 'middle'
-
-	// Points text
-	ctx.font = `${fontSize}px "Press Start 2P"` // Ensure font is set before each text
-	ctx.fillStyle = '#000000'
-	ctx.fillText(pointsText, startX + horizontalPadding, boxY + boxHeight / 2)
-
-	// Rounds text
-	ctx.font = `${fontSize}px "Press Start 2P"` // Ensure font is set before each text
-	ctx.fillStyle = '#FFFFFF'
-	ctx.fillText(
-		roundsText,
-		startX + pointsBoxWidth + padding + horizontalPadding,
-		boxY + boxHeight / 2
-	)
-	ctx.textBaseline = 'alphabetic'
-
-	ctx.restore()
-}
-
 // Drawing functions
-function drawBackground(skipRing = false) {
+function drawBackground(ctx) {
 	const scale = window.gameScale
 	if (!scale) return
 
-	const width = gameCanvas.width
-	const height = gameCanvas.height
+	// Use full canvas dimensions for background
+	const width = scale.width
+	const height = scale.height
 	const unit = scale.unit
 
 	// Background
@@ -916,8 +743,8 @@ function drawBackground(skipRing = false) {
 	ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)'
 	ctx.lineWidth = Math.max(1, unit / 20)
 
-	// Draw grid across full canvas with reduced scale
-	const gridSpacing = unit * 1.2 // Reduced spacing for denser grid
+	// Draw grid across full canvas
+	const gridSpacing = unit * 1.2
 	const verticalLines = Math.ceil(width / gridSpacing)
 	const horizontalLines = Math.ceil(height / gridSpacing)
 
@@ -942,7 +769,7 @@ function drawBackground(skipRing = false) {
 	// Draw crowd pattern during gameplay
 	if (gameStarted && images.crowdImage) {
 		ctx.globalAlpha = 0.6
-		const crowdHeight = unit * 8 // Height of crowd section
+		const crowdHeight = unit * 8
 		const pattern = ctx.createPattern(images.crowdImage, 'repeat')
 		if (pattern) {
 			ctx.fillStyle = pattern
@@ -950,107 +777,140 @@ function drawBackground(skipRing = false) {
 		}
 		ctx.globalAlpha = 1.0
 	}
+
+	// Only draw ring during gameplay or game over screen
+	if (gameStarted || gameOver) {
+		drawRing(ctx)
+	}
 }
 
-function drawTitleScreen() {
+// Update drawRing to use full canvas dimensions
+function drawRing(ctx) {
 	const scale = window.gameScale
 	if (!scale) return
 
-	const width = gameCanvas.width
-	const height = gameCanvas.height
+	const width = scale.width
+	const height = scale.height
 	const unit = scale.unit
 
-	// Calculate safe area with padding
-	const safePadding = Math.max(unit * 3, width * 0.08)
-	const safeWidth = width - safePadding * 2
-	const safeHeight = height - safePadding * 2
+	// Ring elements - adjusted height
+	const ringTop = unit * 4 // Moved up from 6 to 4 units
+	const ringBottom = height
+	const ringHeight = ringBottom - ringTop
 
-	// Background
-	ctx.fillStyle = '#000044'
-	ctx.fillRect(0, 0, width, height)
+	// Ring floor
+	ctx.fillStyle = '#00CEC4'
+	ctx.beginPath()
+	ctx.moveTo(unit * 2, ringTop)
+	ctx.lineTo(width - unit * 2, ringTop)
+	ctx.lineTo(width * 1.1, ringBottom)
+	ctx.lineTo(-width * 0.1, ringBottom)
+	ctx.fill()
 
-	// Grid pattern (reuse from background, but skip ring)
-	drawBackground(true)
+	// Ring posts
+	const postWidth = unit * 0.8
+	const postHeight = unit * 3
+	ctx.fillStyle = '#FFFFFF'
+	ctx.fillRect(unit * 2.5, ringTop - postHeight / 2, postWidth, postHeight)
+	ctx.fillRect(
+		width - unit * 2.5 - postWidth,
+		ringTop - postHeight / 2,
+		postWidth,
+		postHeight
+	)
+
+	// Ring ropes
+	ctx.strokeStyle = '#FF69B4'
+	ctx.lineWidth = Math.max(unit / 6, 2)
+
+	for (let i = 0; i < 3; i++) {
+		const topY = ringTop - postHeight * 0.6 + (i + 1) * (postHeight / 3)
+		const bottomY = ringBottom - i * unit
+
+		// Left side rope
+		ctx.beginPath()
+		ctx.moveTo(unit * 2.5 + postWidth / 2, topY)
+		ctx.lineTo(-width * 0.1, bottomY)
+		ctx.stroke()
+
+		// Right side rope
+		ctx.beginPath()
+		ctx.moveTo(width - unit * 2.5 - postWidth / 2, topY)
+		ctx.lineTo(width * 1.1, bottomY)
+		ctx.stroke()
+
+		// Top rope
+		ctx.beginPath()
+		ctx.moveTo(unit * 2.5 + postWidth / 2, topY)
+		ctx.lineTo(width - unit * 2.5 - postWidth / 2, topY)
+		ctx.stroke()
+
+		// Bottom rope
+		ctx.beginPath()
+		ctx.moveTo(-width * 0.1, bottomY)
+		ctx.lineTo(width * 1.1, bottomY)
+		ctx.stroke()
+	}
+}
+
+function drawTitleScreen(ctx) {
+	const scale = window.gameScale
+	if (!scale) return
+
+	// Use CSS pixels for layout
+	const width = scale.width
+	const height = scale.height
+	const unit = scale.unit
+
+	// Draw background first
+	drawBackground(ctx)
 
 	// Center all text
 	ctx.textAlign = 'center'
+	ctx.textBaseline = 'middle'
 
-	// Calculate text sizes first to determine total height
-	const titleSize = Math.min(unit * 2.5, safeWidth / 10, safeHeight / 8)
-	const instructionSize = Math.min(unit * 0.8, safeWidth / 30, safeHeight / 20)
-	const menuSize = Math.min(unit * 1.2, safeWidth / 20, safeHeight / 15)
+	// Calculate text sizes based on viewport size
+	const titleSize = Math.min(unit * 2, width / 10)
+	const subtitleSize = Math.min(unit * 1.5, width / 15)
+	const instructionSize = Math.min(unit * 0.8, width / 20)
+	const menuSize = Math.min(unit * 1.2, width / 15)
 
-	// Use unit-based spacing
-	const titleSpacing = unit * 1.5
-	const instructionSpacing = unit * 3
-	const menuSpacing = unit * 2
-
-	// Calculate total stack height with unit-based spacing
-	const stackHeight =
-		titleSize * 2 + // CLAPPY + CHEEKS!!
-		titleSpacing +
-		instructionSize * 2 + // Two lines of instructions
-		instructionSpacing +
-		menuSize + // PRESS SPACE
-		menuSpacing
-
-	// Center the stack vertically in safe area
-	let currentY = safePadding + (safeHeight - stackHeight) / 2
-
-	// Title group
+	// Title
 	ctx.font = `${titleSize}px "Press Start 2P"`
+	ctx.fillStyle = '#FFA500'
+	ctx.fillText('CLAPPY', width / 2, height * 0.25)
+	ctx.fillText('CHEEKS!!', width / 2, height * 0.35)
 
-	// Create gradient
-	const titleGradient = ctx.createLinearGradient(
-		0,
-		currentY - titleSize,
-		0,
-		currentY + titleSize * 2.5
-	)
-	titleGradient.addColorStop(0, '#FFA500')
-	titleGradient.addColorStop(0.5, '#FFD700')
-	titleGradient.addColorStop(1, '#FFA500')
-
-	ctx.fillStyle = titleGradient
-	ctx.fillText('CLAPPY', width / 2, currentY)
-	ctx.fillText('CHEEKS!!', width / 2, currentY + titleSize)
-	currentY += titleSize * 2 + titleSpacing
-
-	// Instructions group
+	// Instructions
 	ctx.font = `${instructionSize}px "Press Start 2P"`
 	ctx.fillStyle = '#FFFFFF'
-	ctx.fillText('3 ROUNDS PER MATCH', width / 2, currentY)
-	currentY += instructionSize // Set to exactly 1.0
-	ctx.fillText(
-		'DODGE PUNCHES FOR POINTS',
-		width / 2,
-		currentY + instructionSize * 1.2
-	)
-	currentY += instructionSize * 2 + instructionSpacing
+	ctx.fillText('3 ROUNDS PER MATCH', width / 2, height * 0.5)
+	ctx.fillText('DODGE PUNCHES FOR POINTS', width / 2, height * 0.57)
 
-	// Menu text (PRESS SPACE)
-	ctx.font = `${menuSize}px "Press Start 2P"`
+	// Press Space
 	if (roundsLeft > 0) {
-		// Draw decorative gloves pointing at PRESS SPACE
+		ctx.font = `${menuSize}px "Press Start 2P"`
+		ctx.fillStyle =
+			Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
+		ctx.fillText('PRESS SPACE', width / 2, height * 0.7)
+
+		// Draw decorative gloves
 		if (images.armImage) {
 			const gloveSize = menuSize * 2.5
-			const textMetrics = ctx.measureText('PRESS SPACE')
-			const gloveSpacing = textMetrics.width * 2.4
-			const centerX = width / 2
-			const gloveY = currentY - menuSize * 0.8
+			const textWidth = ctx.measureText('PRESS SPACE').width
+			const gloveSpacing = textWidth * 2.4
+			const gloveY = height * 0.7
+			const moveAmount =
+				Math.floor(performance.now() / 250) % 2 ? unit * 0.4 : 0
 
 			// Calculate dimensions for proper centering
 			const gloveWidth = gloveSize
 			const gloveHeight =
 				(gloveSize / images.armImage.width) * images.armImage.height
 
-			// Calculate glove movement based on flashing text timing
-			const moveAmount =
-				Math.floor(performance.now() / 250) % 2 ? unit * 0.4 : 0
-
 			// Left glove
 			ctx.save()
-			ctx.translate(centerX - gloveSpacing / 2 - moveAmount, gloveY)
+			ctx.translate(width / 2 - gloveSpacing / 2 - moveAmount, gloveY)
 			ctx.rotate(Math.PI / 2)
 			ctx.scale(-1, 1)
 			ctx.drawImage(
@@ -1064,7 +924,7 @@ function drawTitleScreen() {
 
 			// Right glove
 			ctx.save()
-			ctx.translate(centerX + gloveSpacing / 2 + moveAmount, gloveY)
+			ctx.translate(width / 2 + gloveSpacing / 2 + moveAmount, gloveY)
 			ctx.rotate(-Math.PI / 2)
 			ctx.drawImage(
 				images.armImage,
@@ -1075,170 +935,169 @@ function drawTitleScreen() {
 			)
 			ctx.restore()
 		}
-
-		ctx.fillStyle =
-			Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
-		ctx.fillText('PRESS SPACE', width / 2, currentY)
 	} else {
+		ctx.font = `${menuSize}px "Press Start 2P"`
 		ctx.fillStyle = '#FFFFFF'
-		ctx.fillText('GAME OVER', width / 2, currentY)
+		ctx.fillText('GAME OVER', width / 2, height * 0.7)
 	}
-	currentY += menuSize + menuSpacing
 
-	// Score at bottom of stack if present
+	// Score
 	if (totalScore > 0) {
-		const scoreSize = Math.min(unit * 0.8, safeWidth / 30, safeHeight / 20)
-		ctx.font = `${scoreSize}px "Press Start 2P"`
-		const totalScoreText = `TOTAL SCORE: ${totalScore}`
-		const scoreMetrics = ctx.measureText(totalScoreText)
-		const scorePadding = unit * 0.8 // Consistent unit-based padding
-
-		// White background
+		ctx.font = `${instructionSize}px "Press Start 2P"`
 		ctx.fillStyle = '#FFFFFF'
-		ctx.fillRect(
-			width / 2 - scoreMetrics.width / 2 - scorePadding,
-			height - safePadding * 2.5,
-			scoreMetrics.width + scorePadding * 2,
-			scoreSize * 1.4
-		)
-
-		// Score text
-		ctx.fillStyle = '#000000'
-		ctx.fillText(totalScoreText, width / 2, height - safePadding * 2)
+		ctx.fillText(`TOTAL SCORE: ${totalScore}`, width / 2, height * 0.85)
 	}
 
-	// Add cheat mode text if active (in same position as copyright)
-	if (window.cheatMode) {
-		const copyrightSize = Math.min(unit * 0.5, width / 40)
-		ctx.font = `${copyrightSize}px "Press Start 2P"`
-		ctx.fillStyle =
-			Math.floor(performance.now() / 250) % 2 ? '#ff3333' : '#cc0000'
-		ctx.fillText('CHEAT MODE ACTIVATED', width / 2, height - safePadding)
-	} else {
-		const copyrightSize = Math.min(unit * 0.5, width / 40)
-		ctx.font = `${copyrightSize}px "Press Start 2P"`
-		ctx.fillStyle = '#8888FF'
-		ctx.fillText('NOT © 2024 FWD:FWD:FWD:', width / 2, height - safePadding)
-	}
+	// Copyright - moved up from bottom
+	const copyrightSize = Math.min(unit * 0.5, width / 30)
+	const copyrightPadding = unit * 2 // Add padding from bottom
+	ctx.font = `${copyrightSize}px "Press Start 2P"`
+	ctx.fillStyle = window.cheatMode ? '#FF0000' : '#8888FF'
+	ctx.fillText(
+		window.cheatMode ? 'CHEAT MODE ACTIVATED' : 'NOT © 2024 FWD:FWD:FWD:',
+		width / 2,
+		height - copyrightPadding
+	)
 }
 
-function drawGameOverScreen() {
+function drawGameOverScreen(ctx) {
 	const scale = window.gameScale
 	if (!scale) return
 
-	const width = gameCanvas.width
-	const height = gameCanvas.height
+	// Use CSS pixels for layout
+	const width = scale.width
+	const height = scale.height
 	const unit = scale.unit
-	const safePadding = Math.max(unit * 3, width * 0.08)
-	const safeWidth = width - safePadding * 2
-	const safeHeight = height - safePadding * 2
+
+	// Draw background first
+	drawBackground(ctx)
 
 	// Center all text
 	ctx.textAlign = 'center'
+	ctx.textBaseline = 'middle'
 
-	// Calculate text sizes
-	const headerSize = Math.min(unit * 1.8, width / 15)
-	const textSize = Math.min(unit * 0.8, width / 30)
-	const copyrightSize = Math.min(unit * 0.5, width / 40)
-
-	// Calculate total stack height
-	const stackHeight =
-		roundsLeft === 0
-			? headerSize + // MATCH OVER
-			  textSize * 3 // Two lines of scores
-			: headerSize + // KNOCKOUT!!
-			  textSize * 5 // Two lines of scores + PRESS SPACE + ROUNDS LEFT
-
-	// Center the stack vertically in safe area but shift up slightly
-	let currentY = safePadding + (safeHeight - stackHeight) / 2 - unit * 2 // Shifted up by 2 units
-
-	// Header group
-	ctx.font = `${headerSize}px "Press Start 2P"`
-	ctx.fillStyle = '#FFFFFF'
+	// Calculate text sizes based on viewport size
+	const titleSize = Math.min(unit * 2, width / 10)
+	const textSize = Math.min(unit * 1.2, width / 15)
+	const scoreSize = Math.min(unit * 1, width / 20)
 
 	if (roundsLeft === 0) {
 		// Match over screen
-		ctx.fillStyle = '#000044'
-		ctx.fillText('KNOCKOUT!!', width / 2, currentY + unit * 3)
-		currentY += headerSize * 1.5 + unit * 4
+		ctx.font = `${titleSize}px "Press Start 2P"`
+		ctx.fillStyle = '#00005C'
+		ctx.fillText('KNOCKOUT!!', width / 2, height * 0.3)
 
-		// Score group with white background
-		ctx.font = `${textSize}px "Press Start 2P"`
-		const finalScoreText = `FINAL SCORE: ${totalScore + score}`
-		const scoreMetrics = ctx.measureText(finalScoreText)
+		// Final score with container
+		ctx.font = `${scoreSize}px "Press Start 2P"`
+		const scoreText = `FINAL SCORE: ${totalScore + score}`
+		const scoreWidth = ctx.measureText(scoreText).width
+		const padding = scoreSize * 0.8
+		const boxWidth = scoreWidth + padding * 2
+		const boxHeight = scoreSize * 1.4
+		const boxY = height * 0.5 - boxHeight / 2
 
-		// Calculate text dimensions including ascent and descent
-		const textHeight = textSize // Base height of the font
-		const verticalPadding = textSize * 0.6 // Consistent padding vertically
-		const horizontalPadding = textSize * 0.8 // Slightly more padding horizontally
-		const boxWidth = scoreMetrics.width + horizontalPadding * 2
-		const boxHeight = textHeight + verticalPadding * 2
-
-		// White background box - centered both horizontally and vertically
+		// Score container
 		ctx.fillStyle = '#FFFFFF'
-		ctx.fillRect(
-			width / 2 - boxWidth / 2,
-			currentY - boxHeight / 2,
-			boxWidth,
-			boxHeight
-		)
+		ctx.fillRect(width / 2 - boxWidth / 2, boxY, boxWidth, boxHeight)
 
-		// Score text in blue - centered in the box
-		ctx.fillStyle = '#000044'
-		ctx.textBaseline = 'middle' // Set baseline to middle for vertical centering
-		ctx.fillText(finalScoreText, width / 2, currentY)
-		ctx.textBaseline = 'alphabetic' // Reset baseline to default
+		// Score text
+		ctx.fillStyle = '#004643'
+		ctx.fillText(scoreText, width / 2, height * 0.5)
 
-		// Add copyright or cheat mode text at bottom
+		// Copyright - moved up from bottom
+		const copyrightSize = Math.min(unit * 0.5, width / 30)
+		const copyrightPadding = unit * 2 // Add padding from bottom
 		ctx.font = `${copyrightSize}px "Press Start 2P"`
-		if (window.cheatMode) {
-			ctx.fillStyle =
-				Math.floor(performance.now() / 250) % 2 ? '#ff3333' : '#cc0000'
-			ctx.fillText('CHEAT MODE ACTIVATED', width / 2, height - safePadding)
-		} else {
-			ctx.fillStyle = '#004A47'
-			ctx.fillText('NOT © 2024 FWD:FWD:FWD:', width / 2, height - safePadding)
-		}
+		ctx.fillStyle = window.cheatMode ? '#FF0000' : '#004643'
+		ctx.fillText(
+			window.cheatMode ? 'CHEAT MODE ACTIVATED' : 'NOT © 2024 FWD:FWD:FWD:',
+			width / 2,
+			height - copyrightPadding
+		)
 	} else {
 		// Round over screen
-		ctx.fillStyle = '#000044'
-		ctx.fillText('ROUND', width / 2, currentY + unit * 3)
-		ctx.fillText('OVER!!', width / 2, currentY + unit * 5)
-		currentY += headerSize * 3 + unit * 2 // Reduced spacing here
+		ctx.font = `${titleSize}px "Press Start 2P"`
+		ctx.fillStyle = '#00005C'
+		ctx.fillText('ROUND', width / 2, height * 0.25)
+		ctx.fillText('OVER!!', width / 2, height * 0.35)
 
-		// Score group - all lines with equal spacing
-		ctx.fillStyle = '#004A47'
-		ctx.font = `${textSize}px "Press Start 2P"`
-		const lineSpacing = textSize * 1.8 // Equal spacing between all lines
+		// Scores
+		ctx.font = `${scoreSize}px "Press Start 2P"`
+		ctx.fillStyle = '#004643'
+		ctx.fillText(`ROUND SCORE: ${score}`, width / 2, height * 0.5)
+		ctx.fillText(`TOTAL SCORE: ${totalScore + score}`, width / 2, height * 0.6)
+		ctx.fillText(`ROUNDS LEFT: ${roundsLeft}`, width / 2, height * 0.7)
 
-		ctx.fillText(`ROUND SCORE: ${score}`, width / 2, currentY)
-		ctx.fillText(
-			`TOTAL SCORE: ${totalScore + score}`,
-			width / 2,
-			currentY + lineSpacing
-		)
-		ctx.fillText(
-			`ROUNDS LEFT: ${roundsLeft}`,
-			width / 2,
-			currentY + lineSpacing * 2
-		)
-		currentY += lineSpacing * 3
-
-		// Only show PRESS SPACE after knockout delay
+		// Press space (after delay)
 		if (performance.now() - knockoutTime > KNOCKOUT_DELAY) {
+			ctx.font = `${textSize}px "Press Start 2P"`
 			ctx.fillStyle =
 				Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
-			ctx.fillText('PRESS SPACE', width / 2, currentY)
-		}
-
-		// Add cheat mode text if active (in same position as copyright would be)
-		if (window.cheatMode) {
-			ctx.font = `${copyrightSize}px "Press Start 2P"`
-			ctx.fillStyle =
-				Math.floor(performance.now() / 250) % 2 ? '#ff3333' : '#cc0000'
-			ctx.fillText('CHEAT MODE ACTIVATED', width / 2, height - safePadding)
+			ctx.fillText('PRESS SPACE', width / 2, height * 0.85)
 		}
 	}
+}
+
+// Update drawHUD to fix scoreboard sizing
+function drawHUD(ctx) {
+	const scale = window.gameScale
+	if (!scale) return
+
+	const width = scale.width
+	const height = scale.height
+	const unit = scale.unit
+
+	ctx.save()
+
+	// Show flashing PRESS SPACE during any round until first action
+	if (!firstAction && !hasEverActed && gameStarted && !gameOver) {
+		const promptSize = Math.min(unit * 1.2, width / 15)
+		ctx.font = `${promptSize}px "Press Start 2P"`
+		ctx.textAlign = 'center'
+		ctx.textBaseline = 'middle'
+		ctx.fillStyle =
+			Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
+		ctx.fillText('PRESS SPACE', width / 2, height / 2)
+	}
+
+	// HUD bar
+	const hudHeight = Math.min(height * 0.06, unit * 1.5)
+	const fontSize = Math.min(hudHeight * 0.6, width / 35)
+	const padding = fontSize * 0.8
+
+	// Set up text properties
+	ctx.font = `${fontSize}px "Press Start 2P"`
+	ctx.textAlign = 'center'
+	ctx.textBaseline = 'middle'
+
+	// Measure both texts
+	const pointsText = `POINTS: ${score}`
+	const roundsText = `ROUND: ${currentRound}/3`
+	const pointsTextWidth = ctx.measureText(pointsText).width
+	const roundsTextWidth = ctx.measureText(roundsText).width
+
+	// Calculate container widths with padding
+	const pointsWidth = pointsTextWidth + padding * 2
+	const roundsWidth = roundsTextWidth + padding * 2
+
+	// Position containers to touch at center
+	const centerY = unit / 2
+	const pointsX = width / 2 - pointsWidth
+	const roundsX = width / 2
+
+	// Draw points container and text
+	ctx.fillStyle = '#98FF98'
+	ctx.fillRect(pointsX, centerY, pointsWidth, hudHeight)
+	ctx.fillStyle = '#000000'
+	ctx.fillText(pointsText, pointsX + pointsWidth / 2, centerY + hudHeight / 2)
+
+	// Draw rounds container and text
+	ctx.fillStyle = '#000000'
+	ctx.fillRect(roundsX, centerY, roundsWidth, hudHeight)
+	ctx.fillStyle = '#FFFFFF'
+	ctx.fillText(roundsText, roundsX + roundsWidth / 2, centerY + hudHeight / 2)
+
+	ctx.restore()
 }
 
 // Collision detection
@@ -1280,17 +1139,14 @@ function checkCollisions() {
 			intersectRect(cheeksBox, bottomGlove)
 		) {
 			playKnockoutSound()
-			// Reset share button state when round ends
 			window.shareData = null
 			return true
 		}
 
 		if (!pair.passed && cheeks.x > pair.x) {
 			pair.passed = true
-			// Add cheat points if in cheat mode
 			score += window.cheatPoints || 1
 
-			// Increase game speed every 1 points up to max speed
 			if (score % 1 === 0 && gameSpeed < MAX_SPEED && !window.cheatMode) {
 				gameSpeed = Math.min(MAX_SPEED, gameSpeed + SPEED_INCREASE)
 				console.log('Speed increased to:', gameSpeed)
@@ -1317,7 +1173,6 @@ function checkBounds() {
 	const outOfBounds = cheeks.y < 0 || cheeks.y > window.gameScale.height
 	if (outOfBounds) {
 		playKnockoutSound()
-		// Reset share button state when round ends
 		window.shareData = null
 	}
 	return outOfBounds
