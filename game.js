@@ -199,8 +199,10 @@ function handleResize() {
 		const height = containerHeight
 
 		// Set display size (CSS pixels)
-		gameCanvas.style.width = `${width}px`
-		gameCanvas.style.height = `${height}px`
+		gameCanvas.style.width = '100%'
+		gameCanvas.style.height = '100%'
+		gameCanvas.style.left = '0'
+		gameCanvas.style.top = '0'
 
 		// Set actual size in memory (scaled for DPI)
 		gameCanvas.width = Math.floor(width * dpr)
@@ -232,7 +234,7 @@ function handleResize() {
 		// Update glove gaps and positions
 		GLOVE_OPENING = baseUnit * 8
 
-		// Update WebGL viewport
+		// Update WebGL viewport if needed
 		if (gl) {
 			gl.viewport(0, 0, gameCanvas.width, gameCanvas.height)
 		}
@@ -730,7 +732,6 @@ function drawBackground(ctx) {
 	const scale = window.gameScale
 	if (!scale) return
 
-	// Use full canvas dimensions for background
 	const width = scale.width
 	const height = scale.height
 	const unit = scale.unit
@@ -784,7 +785,7 @@ function drawBackground(ctx) {
 	}
 }
 
-// Update drawRing to use full canvas dimensions
+// Update drawRing to extend perspective distortion
 function drawRing(ctx) {
 	const scale = window.gameScale
 	if (!scale) return
@@ -793,33 +794,34 @@ function drawRing(ctx) {
 	const height = scale.height
 	const unit = scale.unit
 
-	// Ring elements - adjusted height
-	const ringTop = unit * 4 // Moved up from 6 to 4 units
-	const ringBottom = height
+	// Ring elements - minimal insets to extend closer to edges
+	const insetX = unit * 1.5
+	const ringTop = unit * 4
+	const ringBottom = height + unit * 2
 	const ringHeight = ringBottom - ringTop
 
-	// Ring floor
+	// Ring floor with increased perspective distortion
 	ctx.fillStyle = '#00CEC4'
 	ctx.beginPath()
-	ctx.moveTo(unit * 2, ringTop)
-	ctx.lineTo(width - unit * 2, ringTop)
-	ctx.lineTo(width * 1.1, ringBottom)
-	ctx.lineTo(-width * 0.1, ringBottom)
+	ctx.moveTo(insetX, ringTop)
+	ctx.lineTo(width - insetX, ringTop)
+	ctx.lineTo(width + unit * 8, ringBottom) // Moved further right
+	ctx.lineTo(-unit * 8, ringBottom) // Moved further left
 	ctx.fill()
 
-	// Ring posts
+	// Ring posts - adjusted for minimal insets
 	const postWidth = unit * 0.8
 	const postHeight = unit * 3
 	ctx.fillStyle = '#FFFFFF'
-	ctx.fillRect(unit * 2.5, ringTop - postHeight / 2, postWidth, postHeight)
+	ctx.fillRect(insetX * 1.5, ringTop - postHeight / 2, postWidth, postHeight)
 	ctx.fillRect(
-		width - unit * 2.5 - postWidth,
+		width - insetX * 1.5 - postWidth,
 		ringTop - postHeight / 2,
 		postWidth,
 		postHeight
 	)
 
-	// Ring ropes
+	// Ring ropes - adjusted for increased perspective
 	ctx.strokeStyle = '#FF69B4'
 	ctx.lineWidth = Math.max(unit / 6, 2)
 
@@ -827,37 +829,67 @@ function drawRing(ctx) {
 		const topY = ringTop - postHeight * 0.6 + (i + 1) * (postHeight / 3)
 		const bottomY = ringBottom - i * unit
 
-		// Left side rope
+		// Left side rope - extended further left
 		ctx.beginPath()
-		ctx.moveTo(unit * 2.5 + postWidth / 2, topY)
-		ctx.lineTo(-width * 0.1, bottomY)
+		ctx.moveTo(insetX * 1.5 + postWidth / 2, topY)
+		ctx.lineTo(-unit * 6 + i * unit * 2, bottomY) // Progressive extension
 		ctx.stroke()
 
-		// Right side rope
+		// Right side rope - extended further right
 		ctx.beginPath()
-		ctx.moveTo(width - unit * 2.5 - postWidth / 2, topY)
-		ctx.lineTo(width * 1.1, bottomY)
+		ctx.moveTo(width - insetX * 1.5 - postWidth / 2, topY)
+		ctx.lineTo(width + unit * 6 - i * unit * 2, bottomY) // Progressive extension
 		ctx.stroke()
 
 		// Top rope
 		ctx.beginPath()
-		ctx.moveTo(unit * 2.5 + postWidth / 2, topY)
-		ctx.lineTo(width - unit * 2.5 - postWidth / 2, topY)
+		ctx.moveTo(insetX * 1.5 + postWidth / 2, topY)
+		ctx.lineTo(width - insetX * 1.5 - postWidth / 2, topY)
 		ctx.stroke()
 
-		// Bottom rope
+		// Bottom rope - extended perspective
 		ctx.beginPath()
-		ctx.moveTo(-width * 0.1, bottomY)
-		ctx.lineTo(width * 1.1, bottomY)
+		ctx.moveTo(-unit * 6 + i * unit * 2, bottomY)
+		ctx.lineTo(width + unit * 6 - i * unit * 2, bottomY)
 		ctx.stroke()
 	}
 }
 
+// Update helper function for consistent copyright text with blinking cheat mode
+function drawCopyright(ctx, color) {
+	const scale = window.gameScale
+	if (!scale) return
+
+	const width = scale.width
+	const height = scale.height
+	const unit = scale.unit
+
+	const copyrightSize = Math.min(unit * 0.5, width / 30)
+	const copyrightPadding = unit * 2
+	ctx.font = `${copyrightSize}px "Press Start 2P"`
+
+	if (window.cheatMode) {
+		// Blinking red text for cheat mode
+		ctx.fillStyle =
+			Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
+	} else {
+		ctx.fillStyle = color
+	}
+
+	ctx.textAlign = 'center'
+	ctx.textBaseline = 'middle'
+	ctx.fillText(
+		window.cheatMode ? 'CHEAT MODE ACTIVATED' : 'NOT © 2024 FWD:FWD:FWD:',
+		width / 2,
+		height - copyrightPadding
+	)
+}
+
+// Update drawTitleScreen to use helper
 function drawTitleScreen(ctx) {
 	const scale = window.gameScale
 	if (!scale) return
 
-	// Use CSS pixels for layout
 	const width = scale.width
 	const height = scale.height
 	const unit = scale.unit
@@ -869,37 +901,40 @@ function drawTitleScreen(ctx) {
 	ctx.textAlign = 'center'
 	ctx.textBaseline = 'middle'
 
-	// Calculate text sizes based on viewport size
-	const titleSize = Math.min(unit * 2, width / 10)
-	const subtitleSize = Math.min(unit * 1.5, width / 15)
-	const instructionSize = Math.min(unit * 0.8, width / 20)
-	const menuSize = Math.min(unit * 1.2, width / 15)
+	// Calculate text sizes with further reductions
+	const titleSize = Math.min(unit * 1.6, width / 14)
+	const subtitleSize = Math.min(unit * 1.1, width / 20)
+	const instructionSize = Math.min(unit * 0.6, width / 28)
+	const menuSize = Math.min(unit * 0.9, width / 20)
 
-	// Title
+	// Move text further from edges
+	const insetY = unit * 4
+
+	// Title - shifted up
 	ctx.font = `${titleSize}px "Press Start 2P"`
 	ctx.fillStyle = '#FFA500'
 	ctx.fillText('CLAPPY', width / 2, height * 0.25)
 	ctx.fillText('CHEEKS!!', width / 2, height * 0.35)
 
-	// Instructions
+	// Instructions - shifted up and tightened
 	ctx.font = `${instructionSize}px "Press Start 2P"`
 	ctx.fillStyle = '#FFFFFF'
-	ctx.fillText('3 ROUNDS PER MATCH', width / 2, height * 0.5)
-	ctx.fillText('DODGE PUNCHES FOR POINTS', width / 2, height * 0.57)
+	ctx.fillText('3 ROUNDS PER MATCH', width / 2, height * 0.48)
+	ctx.fillText('DODGE PUNCHES FOR POINTS', width / 2, height * 0.54)
 
-	// Press Space
+	// Press Space - shifted up
 	if (roundsLeft > 0) {
 		ctx.font = `${menuSize}px "Press Start 2P"`
 		ctx.fillStyle =
 			Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
-		ctx.fillText('PRESS SPACE', width / 2, height * 0.7)
+		ctx.fillText('PRESS SPACE', width / 2, height * 0.65)
 
-		// Draw decorative gloves
+		// Draw decorative gloves - adjusted for new text position
 		if (images.armImage) {
 			const gloveSize = menuSize * 2.5
 			const textWidth = ctx.measureText('PRESS SPACE').width
 			const gloveSpacing = textWidth * 2.4
-			const gloveY = height * 0.7
+			const gloveY = height * 0.65
 			const moveAmount =
 				Math.floor(performance.now() / 250) % 2 ? unit * 0.4 : 0
 
@@ -938,36 +973,32 @@ function drawTitleScreen(ctx) {
 	} else {
 		ctx.font = `${menuSize}px "Press Start 2P"`
 		ctx.fillStyle = '#FFFFFF'
-		ctx.fillText('GAME OVER', width / 2, height * 0.7)
+		ctx.fillText('GAME OVER', width / 2, height * 0.65)
 	}
 
-	// Score
+	// Score - shifted up
 	if (totalScore > 0) {
 		ctx.font = `${instructionSize}px "Press Start 2P"`
 		ctx.fillStyle = '#FFFFFF'
-		ctx.fillText(`TOTAL SCORE: ${totalScore}`, width / 2, height * 0.85)
+		ctx.fillText(`TOTAL SCORE: ${totalScore}`, width / 2, height * 0.75)
 	}
 
-	// Copyright - moved up from bottom
-	const copyrightSize = Math.min(unit * 0.5, width / 30)
-	const copyrightPadding = unit * 2 // Add padding from bottom
-	ctx.font = `${copyrightSize}px "Press Start 2P"`
-	ctx.fillStyle = window.cheatMode ? '#FF0000' : '#8888FF'
-	ctx.fillText(
-		window.cheatMode ? 'CHEAT MODE ACTIVATED' : 'NOT © 2024 FWD:FWD:FWD:',
-		width / 2,
-		height - copyrightPadding
-	)
+	// Use helper for copyright with title screen color
+	drawCopyright(ctx, window.cheatMode ? '#FF0000' : '#8888FF')
 }
 
+// Update drawGameOverScreen to use helper
 function drawGameOverScreen(ctx) {
 	const scale = window.gameScale
 	if (!scale) return
 
-	// Use CSS pixels for layout
 	const width = scale.width
 	const height = scale.height
 	const unit = scale.unit
+
+	// Use increased insets
+	const insetX = unit * 5
+	const insetY = unit * 4
 
 	// Draw background first
 	drawBackground(ctx)
@@ -976,128 +1007,150 @@ function drawGameOverScreen(ctx) {
 	ctx.textAlign = 'center'
 	ctx.textBaseline = 'middle'
 
-	// Calculate text sizes based on viewport size
-	const titleSize = Math.min(unit * 2, width / 10)
-	const textSize = Math.min(unit * 1.2, width / 15)
-	const scoreSize = Math.min(unit * 1, width / 20)
+	// Calculate text sizes with further reductions
+	const titleSize = Math.min(unit * 1.6, width / 14)
+	const scoreSize = Math.min(unit * 0.9, width / 20)
+	const textSize = Math.min(unit * 0.9, width / 20)
+
+	// Adjust positions to account for insets
+	const effectiveWidth = width - insetX * 2
+	const centerX = width / 2
 
 	if (roundsLeft === 0) {
-		// Match over screen
+		// Final game over screen - centered vertically
+		const knockoutY = height * 0.4 // Center point for knockout group
+
+		// Draw KNOCKOUT!!
 		ctx.font = `${titleSize}px "Press Start 2P"`
 		ctx.fillStyle = '#00005C'
-		ctx.fillText('KNOCKOUT!!', width / 2, height * 0.3)
+		ctx.fillText('KNOCKOUT!!', centerX, knockoutY)
 
-		// Final score with container
+		// Final score with white container - closer to KNOCKOUT
 		ctx.font = `${scoreSize}px "Press Start 2P"`
 		const scoreText = `FINAL SCORE: ${totalScore + score}`
-		const scoreWidth = ctx.measureText(scoreText).width
-		const padding = scoreSize * 0.8
-		const boxWidth = scoreWidth + padding * 2
-		const boxHeight = scoreSize * 1.4
-		const boxY = height * 0.5 - boxHeight / 2
+		const scoreWidth = ctx.measureText(scoreText).width + unit * 2
+		const scoreHeight = unit * 2
+		const scoreY = knockoutY + titleSize * 1.5
 
-		// Score container
+		// Draw white container
 		ctx.fillStyle = '#FFFFFF'
-		ctx.fillRect(width / 2 - boxWidth / 2, boxY, boxWidth, boxHeight)
-
-		// Score text
-		ctx.fillStyle = '#004643'
-		ctx.fillText(scoreText, width / 2, height * 0.5)
-
-		// Copyright - moved up from bottom
-		const copyrightSize = Math.min(unit * 0.5, width / 30)
-		const copyrightPadding = unit * 2 // Add padding from bottom
-		ctx.font = `${copyrightSize}px "Press Start 2P"`
-		ctx.fillStyle = window.cheatMode ? '#FF0000' : '#004643'
-		ctx.fillText(
-			window.cheatMode ? 'CHEAT MODE ACTIVATED' : 'NOT © 2024 FWD:FWD:FWD:',
-			width / 2,
-			height - copyrightPadding
+		ctx.fillRect(
+			centerX - scoreWidth / 2,
+			scoreY - scoreHeight / 2,
+			scoreWidth,
+			scoreHeight
 		)
+
+		// Draw score text
+		ctx.fillStyle = '#000000'
+		ctx.fillText(scoreText, centerX, scoreY)
+
+		// Use helper for copyright with dark ring color
+		drawCopyright(ctx, '#004643')
 	} else {
-		// Round over screen
+		// Round over screen - centered group with consistent spacing
+		const groupCenterY = height * 0.45 // Center point for entire group
+		const titleSpacing = titleSize * 1.5 // Increased space after ROUND OVER
+		const textSpacing = titleSize * 0.8 // Consistent spacing for score texts
+
+		// Calculate total group height
+		const totalHeight =
+			titleSize * 2 + titleSpacing + textSpacing * 3 + textSize
+
+		// Start position to center the group
+		const startY = groupCenterY - totalHeight / 2
+
+		// Draw ROUND OVER!!
 		ctx.font = `${titleSize}px "Press Start 2P"`
 		ctx.fillStyle = '#00005C'
-		ctx.fillText('ROUND', width / 2, height * 0.25)
-		ctx.fillText('OVER!!', width / 2, height * 0.35)
+		ctx.fillText('ROUND', centerX, startY)
+		ctx.fillText('OVER!!', centerX, startY + titleSize * 1.2)
 
-		// Scores
+		// Draw scores with consistent spacing
 		ctx.font = `${scoreSize}px "Press Start 2P"`
 		ctx.fillStyle = '#004643'
-		ctx.fillText(`ROUND SCORE: ${score}`, width / 2, height * 0.5)
-		ctx.fillText(`TOTAL SCORE: ${totalScore + score}`, width / 2, height * 0.6)
-		ctx.fillText(`ROUNDS LEFT: ${roundsLeft}`, width / 2, height * 0.7)
+		const scoresY = startY + titleSize * 2 + titleSpacing
+		ctx.fillText(`ROUND SCORE: ${score}`, centerX, scoresY)
+		ctx.fillText(
+			`TOTAL SCORE: ${totalScore + score}`,
+			centerX,
+			scoresY + textSpacing
+		)
+		ctx.fillText(
+			`ROUNDS LEFT: ${roundsLeft}`,
+			centerX,
+			scoresY + textSpacing * 2
+		)
 
 		// Press space (after delay)
 		if (performance.now() - knockoutTime > KNOCKOUT_DELAY) {
 			ctx.font = `${textSize}px "Press Start 2P"`
 			ctx.fillStyle =
 				Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
-			ctx.fillText('PRESS SPACE', width / 2, height * 0.85)
+			ctx.fillText('PRESS SPACE', centerX, scoresY + textSpacing * 3)
 		}
+
+		// Use helper for copyright with dark ring color
+		drawCopyright(ctx, '#004643')
 	}
 }
 
-// Update drawHUD to fix scoreboard sizing
+// Update drawHUD to include copyright during gameplay
 function drawHUD(ctx) {
-	const scale = window.gameScale
-	if (!scale) return
+	if (!window.gameScale) return
 
+	const scale = window.gameScale
+	const unit = scale.unit * 0.7 // Reduced to match smallest text size
 	const width = scale.width
 	const height = scale.height
-	const unit = scale.unit
 
 	ctx.save()
-
-	// Show flashing PRESS SPACE during any round until first action
-	if (!firstAction && !hasEverActed && gameStarted && !gameOver) {
-		const promptSize = Math.min(unit * 1.2, width / 15)
-		ctx.font = `${promptSize}px "Press Start 2P"`
-		ctx.textAlign = 'center'
-		ctx.textBaseline = 'middle'
-		ctx.fillStyle =
-			Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
-		ctx.fillText('PRESS SPACE', width / 2, height / 2)
-	}
-
-	// HUD bar
-	const hudHeight = Math.min(height * 0.06, unit * 1.5)
-	const fontSize = Math.min(hudHeight * 0.6, width / 35)
-	const padding = fontSize * 0.8
-
-	// Set up text properties
-	ctx.font = `${fontSize}px "Press Start 2P"`
 	ctx.textAlign = 'center'
 	ctx.textBaseline = 'middle'
+	ctx.font = `${unit}px 'Press Start 2P'`
 
-	// Measure both texts
+	// Move HUD up by increasing top inset
+	const insetX = unit * 5
+	const insetY = unit * 3
+	const hudHeight = unit * 1.5
+
+	// Prepare text
 	const pointsText = `POINTS: ${score}`
-	const roundsText = `ROUND: ${currentRound}/3`
+	const roundsText = `ROUND ${currentRound}`
+
+	// Calculate text widths
 	const pointsTextWidth = ctx.measureText(pointsText).width
 	const roundsTextWidth = ctx.measureText(roundsText).width
 
-	// Calculate container widths with padding
+	// Add padding
+	const padding = unit * 0.75
 	const pointsWidth = pointsTextWidth + padding * 2
 	const roundsWidth = roundsTextWidth + padding * 2
 
-	// Position containers to touch at center
-	const centerY = unit / 2
-	const pointsX = width / 2 - pointsWidth
-	const roundsX = width / 2
+	// Calculate center position first
+	const centerX = width / 2
+	const totalWidth = pointsWidth + roundsWidth
+
+	// Position containers relative to center
+	const pointsX = centerX - totalWidth / 2
+	const roundsX = centerX - totalWidth / 2 + pointsWidth
 
 	// Draw points container and text
 	ctx.fillStyle = '#98FF98'
-	ctx.fillRect(pointsX, centerY, pointsWidth, hudHeight)
+	ctx.fillRect(pointsX, insetY, pointsWidth, hudHeight)
 	ctx.fillStyle = '#000000'
-	ctx.fillText(pointsText, pointsX + pointsWidth / 2, centerY + hudHeight / 2)
+	ctx.fillText(pointsText, pointsX + pointsWidth / 2, insetY + hudHeight / 2)
 
 	// Draw rounds container and text
 	ctx.fillStyle = '#000000'
-	ctx.fillRect(roundsX, centerY, roundsWidth, hudHeight)
+	ctx.fillRect(roundsX, insetY, roundsWidth, hudHeight)
 	ctx.fillStyle = '#FFFFFF'
-	ctx.fillText(roundsText, roundsX + roundsWidth / 2, centerY + hudHeight / 2)
+	ctx.fillText(roundsText, roundsX + roundsWidth / 2, insetY + hudHeight / 2)
 
 	ctx.restore()
+
+	// Draw copyright/cheat mode text during gameplay
+	drawCopyright(ctx, '#004643') // Using the same color as round over screen
 }
 
 // Collision detection
