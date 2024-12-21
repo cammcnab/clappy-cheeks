@@ -40,7 +40,6 @@ let gloves
 let images = {
 	cheeksImage: null,
 	armImage: null,
-	bgImage: null,
 	crowdImage: null,
 }
 let audio = {
@@ -487,7 +486,6 @@ async function loadImages() {
 	const imagePromises = [
 		loadImage('images/cheeks.png').then((img) => (images.cheeksImage = img)),
 		loadImage('images/arm.png').then((img) => (images.armImage = img)),
-		loadImage('images/bg.png').then((img) => (images.bgImage = img)),
 		loadImage('images/crowd.png').then((img) => (images.crowdImage = img)),
 	]
 
