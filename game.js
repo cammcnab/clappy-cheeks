@@ -865,7 +865,7 @@ function drawCopyright(ctx, color) {
 	const unit = scale.unit
 
 	const copyrightSize = Math.min(unit * 0.5, width / 30)
-	const copyrightPadding = unit * 2
+	const copyrightPadding = unit * 3
 	ctx.font = `${copyrightSize}px "Press Start 2P"`
 
 	if (window.cheatMode) {
@@ -1018,7 +1018,7 @@ function drawGameOverScreen(ctx) {
 
 	if (roundsLeft === 0) {
 		// Final game over screen - centered vertically
-		const knockoutY = height * 0.4 // Center point for knockout group
+		const knockoutY = height * 0.45 // Center point for knockout group
 
 		// Draw KNOCKOUT!!
 		ctx.font = `${titleSize}px "Press Start 2P"`
@@ -1049,8 +1049,8 @@ function drawGameOverScreen(ctx) {
 		drawCopyright(ctx, '#004643')
 	} else {
 		// Round over screen - centered group with consistent spacing
-		const groupCenterY = height * 0.45 // Center point for entire group
-		const titleSpacing = titleSize * 1.5 // Increased space after ROUND OVER
+		const groupCenterY = height * 0.55 // Center point for entire group
+		const titleSpacing = titleSize * 0.65 // Increased space after ROUND OVER
 		const textSpacing = titleSize * 0.8 // Consistent spacing for score texts
 
 		// Calculate total group height
@@ -1149,8 +1149,10 @@ function drawHUD(ctx) {
 
 	ctx.restore()
 
-	// Draw copyright/cheat mode text during gameplay
-	drawCopyright(ctx, '#004643') // Using the same color as round over screen
+	// Only draw copyright/cheat mode text during gameplay if cheat mode is active
+	if (window.cheatMode) {
+		drawCopyright(ctx, '#004643') // Using the same color as round over screen
+	}
 }
 
 // Collision detection

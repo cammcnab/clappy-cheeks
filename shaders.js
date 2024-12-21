@@ -26,14 +26,29 @@ const fragmentShaderSource = `
     uniform float uTime;
     
     // CRT parameters
-    const float SCANLINE_INTENSITY = 0.035;
+    const float SCANLINE_INTENSITY = 0.15;
     const float CURVATURE = 3.5;
-    const float BRIGHTNESS = 1.0;
-    const float DISTORTION = 0.12;
-    const float RGB_OFFSET = 0.0015;
+    const float BRIGHTNESS = 1.35;
+    const float DISTORTION = 0.1;
+    const float RGB_OFFSET = 0.0013;
     const float CORNER_RADIUS = 0.15;
     const float CORNER_SMOOTHNESS = 0.15;
-    const float VIGNETTE_INTENSITY = 0.12;
+    const float VIGNETTE_INTENSITY = 0.6;
+    const float NOISE_INTENSITY = 0.015;
+    const float BLUR_AMOUNT = 0.7;
+    const float PHOSPHOR_BLUR = 1.2;
+    
+    // Random function
+    float rand(vec2 co) {
+        return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+    }
+    
+    // Screen noise
+    float noise(vec2 uv, float time) {
+        vec2 noise_uv = uv * vec2(uResolution.x / 3.0, uResolution.y / 3.0);
+        float noise = rand(noise_uv + vec2(time * 0.1, 0.0));
+        return noise;
+    }
     
     // Screen curvature with increased distortion
     vec2 curveRemapUV(vec2 uv) {
@@ -68,17 +83,28 @@ const fragmentShaderSource = `
     // Enhanced vignette effect
     float vignette(vec2 uv) {
         uv = uv * 2.0 - 1.0;
-        float vignette = 1.0 - length(uv * vec2(0.65, 0.75));
+        float vignette = 1.0 - length(uv * vec2(0.49, 0.56));
         return smoothstep(0.2, 1.3, pow(vignette, 1.1));
     }
     
     // Enhanced scanline effect with subtle animation
     float scanline(vec2 uv) {
         float time_factor = uTime * 0.5;
-        float scan1 = sin(uv.y * uResolution.y * 0.5 + time_factor) * 0.5 + 0.5;
-        float scan2 = sin(uv.y * uResolution.y * 0.8 + time_factor * 1.1) * 0.3 + 0.7;
-        float scan_mix = mix(scan1, scan2, 0.5);
-        return mix(1.0, scan_mix, SCANLINE_INTENSITY);
+        
+        // Main scanlines
+        float scan1 = sin(uv.y * uResolution.y * 1.0 + time_factor) * 0.5 + 0.5;
+        float scan2 = sin(uv.y * uResolution.y * 2.0 + time_factor * 1.1) * 0.3 + 0.7;
+        
+        // Finer scanlines for more detail
+        float fineScan = sin(uv.y * uResolution.y * 4.0 + time_factor * 0.5) * 0.2 + 0.8;
+        
+        // Combine different scanline patterns
+        float scan_mix = mix(scan1, scan2, 0.5) * fineScan;
+        
+        // Add slight horizontal variation
+        float horizontalVariation = sin(uv.x * uResolution.x * 0.2 - time_factor) * 0.02;
+        
+        return mix(1.0, scan_mix + horizontalVariation, SCANLINE_INTENSITY);
     }
     
     // Enhanced RGB split with stronger chromatic aberration
@@ -100,6 +126,32 @@ const fragmentShaderSource = `
         return vec3(red, green, blue);
     }
     
+    // Gaussian blur approximation
+    vec3 blur(sampler2D tex, vec2 uv, vec2 resolution) {
+        vec2 pixel = vec2(1.0) / resolution;
+        vec3 color = vec3(0.0);
+        
+        // Define kernel weights individually for WebGL1 compatibility
+        float k00 = 0.0625; float k01 = 0.125; float k02 = 0.0625;
+        float k10 = 0.125;  float k11 = 0.25;  float k12 = 0.125;
+        float k20 = 0.0625; float k21 = 0.125; float k22 = 0.0625;
+        
+        // Unrolled 3x3 convolution for compatibility
+        color += rgbSplit(tex, uv + vec2(-1.0, -1.0) * pixel * PHOSPHOR_BLUR).rgb * k00;
+        color += rgbSplit(tex, uv + vec2( 0.0, -1.0) * pixel * PHOSPHOR_BLUR).rgb * k01;
+        color += rgbSplit(tex, uv + vec2( 1.0, -1.0) * pixel * PHOSPHOR_BLUR).rgb * k02;
+        
+        color += rgbSplit(tex, uv + vec2(-1.0,  0.0) * pixel * PHOSPHOR_BLUR).rgb * k10;
+        color += rgbSplit(tex, uv + vec2( 0.0,  0.0) * pixel * PHOSPHOR_BLUR).rgb * k11;
+        color += rgbSplit(tex, uv + vec2( 1.0,  0.0) * pixel * PHOSPHOR_BLUR).rgb * k12;
+        
+        color += rgbSplit(tex, uv + vec2(-1.0,  1.0) * pixel * PHOSPHOR_BLUR).rgb * k20;
+        color += rgbSplit(tex, uv + vec2( 0.0,  1.0) * pixel * PHOSPHOR_BLUR).rgb * k21;
+        color += rgbSplit(tex, uv + vec2( 1.0,  1.0) * pixel * PHOSPHOR_BLUR).rgb * k22;
+        
+        return color;
+    }
+    
     void main() {
         float mask = crtMask(vTextureCoord);
         if (mask <= 0.0) {
@@ -114,10 +166,45 @@ const fragmentShaderSource = `
             return;
         }
         
-        vec3 col = rgbSplit(uSampler, uv);
-        col *= scanline(uv);
-        col *= mix(1.0, vignette(uv), VIGNETTE_INTENSITY);
+        // Apply phosphor blur first
+        vec3 col = blur(uSampler, uv, uResolution);
         
+        // Apply RGB split after blur
+        vec3 rgbSplitColor = rgbSplit(uSampler, uv);
+        col = mix(col, rgbSplitColor, 0.7);
+        
+        // Apply all effects in sequence
+        float scanlineEffect = scanline(uv);
+        float vignetteEffect = mix(1.0, vignette(uv), VIGNETTE_INTENSITY);
+        float screenNoiseEffect = noise(uv, uTime);
+        
+        // Combine all effects
+        col *= scanlineEffect;
+        col *= vignetteEffect;
+        col *= BRIGHTNESS;
+        col += vec3(screenNoiseEffect) * NOISE_INTENSITY;
+        
+        // Enhanced bloom with larger radius
+        vec2 pixelSize = 1.0 / uResolution;
+        vec3 bloom = vec3(0.0);
+        float bloomStrength = 0.45;
+        
+        // Unrolled 5x5 bloom for compatibility
+        for(float i = -2.0; i <= 2.0; i += 1.0) {
+            for(float j = -2.0; j <= 2.0; j += 1.0) {
+                vec2 offset = vec2(i, j) * pixelSize * BLUR_AMOUNT;
+                bloom += rgbSplit(uSampler, uv + offset).rgb;
+            }
+        }
+        bloom /= 25.0;
+        
+        // Mix the bloom with the main color
+        col += bloom * bloomStrength;
+        
+        // Slightly soften the final result
+        col = mix(col, bloom, 0.1);
+        
+        // Final output with mask
         gl_FragColor = vec4(col, mask);
     }
 `
