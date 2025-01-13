@@ -40,7 +40,6 @@ let audio = {
 	initialized: false,
 	context: null,
 }
-let currentClapSound = 0
 
 // Game objects
 class Game {
@@ -214,21 +213,15 @@ class Game {
 			this.initGameObjects()
 			this.initInputHandlers()
 
-			// Load audio assets in background
+			// Load audio assets
 			console.log('Loading audio assets...')
-			PIXI.Assets.loadBundle('audio')
-				.then(async (audioAssets) => {
-					try {
-						await this.initializeAudio(audioAssets)
-					} catch (error) {
-						console.warn('Failed to initialize audio:', error)
-						audio.initialized = true
-					}
-				})
-				.catch((error) => {
-					console.warn('Failed to load audio assets:', error)
-					audio.initialized = true
-				})
+			try {
+				const audioAssets = await PIXI.Assets.loadBundle('audio')
+				await this.initializeAudio(audioAssets)
+			} catch (error) {
+				console.warn('Failed to load audio assets:', error)
+				audio.initialized = true
+			}
 
 			// Start game loop
 			console.log('Starting game loop...')
@@ -726,8 +719,12 @@ class Game {
 				leftGlove._moveHandler = moveHandler
 			}
 
-			// Add press space text after gloves
-			const pressSpace = new PIXI.Text('PRESS SPACE', {
+			// Check if mobile device
+			const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+			const buttonText = isMobile ? 'TAP SCREEN' : 'PRESS SPACE'
+
+			// Add press space/tap screen text after gloves
+			const pressSpace = new PIXI.Text(buttonText, {
 				fontFamily: 'Press Start 2P',
 				fontSize: baseFontSize * 0.6,
 				fill: 0xff0000,
@@ -1390,15 +1387,9 @@ class Game {
 		window.gameSpeed = 0.5
 		window.cheatPoints = 10
 
-		// Play Konami sound using loaded asset
-		if (audio.context) {
-			PIXI.Assets.get('konami')
-				.arrayBuffer()
-				.then((arrayBuffer) => audio.context.decodeAudioData(arrayBuffer))
-				.then((audioBuffer) => {
-					playSound(audioBuffer, { volume: 0.3 })
-				})
-				.catch((e) => console.warn('Konami sound failed:', e))
+		// Play Konami sound using PIXI.sound
+		if (PIXI.sound && PIXI.sound.exists('konami')) {
+			PIXI.sound.play('konami', { volume: 0.3 })
 		}
 
 		console.log('Game state updated:', {
@@ -1509,31 +1500,66 @@ class Game {
 
 	async initializeAudio(audioAssets) {
 		try {
-			// Initialize Web Audio context
-			const audioContext = new (window.AudioContext ||
-				window.webkitAudioContext)()
-
-			// Resume audio context if it's suspended (needed for some browsers)
-			if (audioContext.state === 'suspended') {
-				await audioContext.resume()
+			// Initialize PIXI sound
+			if (!PIXI.sound) {
+				console.warn('PIXI.sound not available')
+				audio.initialized = true
+				return
 			}
 
-			// Store the raw assets and context
-			audio.clapAssets = Array.from(
-				{ length: 9 },
-				(_, i) => audioAssets[`clap${i + 1}`]
-			).filter((asset) => asset)
-			audio.cheerAsset = audioAssets.cheer
-			audio.booAsset = audioAssets.boo
-			audio.context = audioContext
-			audio.initialized = true
+			console.log('Initializing audio with assets:', audioAssets)
 
-			console.log('Audio initialized:', {
-				claps: audio.clapAssets.length,
-				cheer: !!audio.cheerAsset,
-				boo: !!audio.booAsset,
-				contextState: audio.context.state,
-			})
+			// Remove any existing sounds first
+			PIXI.sound.removeAll()
+
+			// Add all sounds to PIXI sound library
+			const loadPromises = []
+
+			// Add clap sounds
+			for (let i = 1; i <= 9; i++) {
+				const clapAsset = audioAssets[`clap${i}`]
+				if (clapAsset) {
+					loadPromises.push(
+						PIXI.sound.add(`clap${i}`, {
+							url: `audio/claps/clap${i}.mp3`,
+							preload: true,
+							volume: 0.3,
+						})
+					)
+				}
+			}
+
+			// Add other sounds
+			const otherSounds = {
+				cheer: { url: 'audio/cheering.mp3', volume: 0.1, loop: true },
+				boo: { url: 'audio/booing.mp3', volume: 0.3 },
+				konami: { url: 'audio/konami.mp3', volume: 0.3 },
+			}
+
+			for (const [name, options] of Object.entries(otherSounds)) {
+				if (audioAssets[name]) {
+					const { url, ...soundOptions } = options
+					loadPromises.push(
+						PIXI.sound.add(name, {
+							url,
+							preload: true,
+							...soundOptions,
+						})
+					)
+				}
+			}
+
+			// Wait for all sounds to load
+			await Promise.all(loadPromises)
+
+			// Log loaded sounds for debugging
+			console.log('Loaded sounds:', Object.keys(PIXI.sound._sounds))
+
+			audio.initialized = true
+			console.log(
+				'PIXI Sound initialized with sounds:',
+				Object.keys(PIXI.sound._sounds)
+			)
 		} catch (error) {
 			console.warn('Failed to initialize audio:', error)
 			audio.initialized = true
@@ -1587,7 +1613,7 @@ let cheerSound = null
 function stopCheerSound() {
 	if (cheerSound) {
 		try {
-			cheerSound.stop()
+			PIXI.sound.stop('cheer')
 			cheerSound = null
 		} catch (e) {
 			console.warn('Stop cheer sound error:', e)
@@ -1596,114 +1622,49 @@ function stopCheerSound() {
 }
 
 async function playFlapSound() {
-	if (!audio.initialized || !audio.context) return
+	if (!audio.initialized || !PIXI.sound) return
 
 	try {
-		// Resume context if suspended
-		if (audio.context.state === 'suspended') {
-			await audio.context.resume()
-		}
-
-		// Use actual clap sounds if available
-		if (audio.clapAssets && audio.clapAssets.length > 0) {
-			const asset = audio.clapAssets[currentClapSound]
-			if (asset) {
-				const arrayBuffer = await asset.arrayBuffer()
-				const buffer = await audio.context.decodeAudioData(arrayBuffer)
-				playSound(buffer, { volume: 0.3 })
-				// Cycle through available clap sounds
-				currentClapSound = (currentClapSound + 1) % audio.clapAssets.length
-				return
-			}
-		}
-
-		// Fallback to oscillator if no audio files
-		if (!audio.context) return
-
-		const oscillator = audio.context.createOscillator()
-		const gainNode = audio.context.createGain()
-
-		oscillator.connect(gainNode)
-		oscillator.connect(audio.context.destination)
-
-		oscillator.type = 'sine'
-		oscillator.frequency.setValueAtTime(440, audio.context.currentTime)
-
-		gainNode.gain.setValueAtTime(0, audio.context.currentTime)
-		gainNode.gain.linearRampToValueAtTime(0.3, audio.context.currentTime + 0.01)
-		gainNode.gain.linearRampToValueAtTime(0, audio.context.currentTime + 0.1)
-
-		oscillator.start()
-		oscillator.stop(audio.context.currentTime + 0.1)
-
-		oscillator.onended = () => {
-			oscillator.disconnect()
-			gainNode.disconnect()
+		// Randomly select a clap sound from 1-9
+		const randomClap = Math.floor(Math.random() * 9) + 1
+		const soundId = `clap${randomClap}`
+		console.log('Playing flap sound:', soundId)
+		if (PIXI.sound.exists(soundId)) {
+			await PIXI.sound.play(soundId)
+		} else {
+			console.warn('Sound not found:', soundId)
 		}
 	} catch (e) {
-		console.warn('Sound play error:', e)
+		console.warn('Flap sound error:', e)
 	}
 }
 
 async function playCheerSound() {
-	if (!audio.initialized || !audio.cheerAsset) return
+	if (!audio.initialized || !PIXI.sound) return
 
 	try {
-		// Resume context if suspended
-		if (audio.context.state === 'suspended') {
-			await audio.context.resume()
-		}
-
 		stopCheerSound()
-		const arrayBuffer = await audio.cheerAsset.arrayBuffer()
-		const buffer = await audio.context.decodeAudioData(arrayBuffer)
-		cheerSound = playSound(buffer, { loop: true, volume: 0.1 })
+		console.log('Playing cheer sound')
+		if (PIXI.sound.exists('cheer')) {
+			cheerSound = await PIXI.sound.play('cheer')
+		} else {
+			console.warn('Cheer sound not found')
+		}
 	} catch (e) {
 		console.warn('Cheer sound error:', e)
 	}
 }
 
 async function playKnockoutSound() {
-	if (!audio.initialized) return
+	if (!audio.initialized || !PIXI.sound) return
 
 	try {
-		// Resume context if suspended
-		if (audio.context.state === 'suspended') {
-			await audio.context.resume()
-		}
-
 		stopCheerSound()
-
-		// Use boo sound if available
-		if (audio.booAsset) {
-			const arrayBuffer = await audio.booAsset.arrayBuffer()
-			const buffer = await audio.context.decodeAudioData(arrayBuffer)
-			playSound(buffer, { volume: 0.3 })
-			return
-		}
-
-		// Fallback to oscillator if no audio file
-		if (!audio.context) return
-
-		const oscillator = audio.context.createOscillator()
-		const gainNode = audio.context.createGain()
-
-		oscillator.connect(gainNode)
-		oscillator.connect(audio.context.destination)
-
-		oscillator.type = 'square'
-		oscillator.frequency.setValueAtTime(220, audio.context.currentTime)
-
-		gainNode.gain.setValueAtTime(0, audio.context.currentTime)
-		gainNode.gain.linearRampToValueAtTime(0.3, audio.context.currentTime + 0.01)
-		gainNode.gain.linearRampToValueAtTime(0, audio.context.currentTime + 0.3)
-
-		oscillator.start()
-		oscillator.stop(audio.context.currentTime + 0.3)
-
-		oscillator.onended = () => {
-			oscillator.disconnect()
-			gainNode.disconnect()
+		console.log('Playing knockout sound')
+		if (PIXI.sound.exists('boo')) {
+			await PIXI.sound.play('boo')
+		} else {
+			console.warn('Boo sound not found')
 		}
 	} catch (e) {
 		console.warn('Knockout sound error:', e)

@@ -1270,6 +1270,7 @@
 		<!-- Game scripts -->
 		<script src="https://pixijs.download/v7.4.0/pixi.min.js"></script>
 		<script src="https://filters.pixijs.download/v5.1.1/pixi-filters.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/@pixi/sound@5.2.2/dist/pixi-sound.js"></script>
 		<script>
 			// Wait for scripts to load before initializing game
 			window.addEventListener('load', () => {
@@ -1277,6 +1278,13 @@
 					console.log('PixiJS and filters loaded successfully')
 				} else {
 					console.error('Failed to load PixiJS filters')
+				}
+
+				// Check if PIXI.sound loaded
+				if (PIXI.sound) {
+					console.log('PIXI Sound loaded successfully')
+				} else {
+					console.error('Failed to load PIXI Sound')
 				}
 			})
 		</script>
@@ -1336,46 +1344,42 @@
 			document.addEventListener('DOMContentLoaded', () => {
 				// Add button sounds - different for control panel vs gamepad
 				document.querySelectorAll('.control-button').forEach((button) => {
-					const originalClick = button.onclick
-
 					// Play control panel button sound
-					const playButtonSound = () => {
-						const buttonSound = new Audio('audio/button.wav')
+					const playButtonSound = (e) => {
+						e.preventDefault() // Prevent default to avoid double triggers
+						const buttonSound = new Audio('audio/button.mp3')
 						buttonSound.play()
 					}
 
-					button.addEventListener('mousedown', playButtonSound)
-					button.addEventListener('touchstart', playButtonSound, {
-						passive: true,
-					})
+					// Remove any existing listeners first
+					button.removeEventListener('mousedown', playButtonSound)
+					button.removeEventListener('touchstart', playButtonSound)
 
-					// Keep original click handler for button functionality
-					button.onclick = (e) => {
-						if (originalClick) originalClick.call(button, e)
-					}
+					// Add single event listener that handles both touch and mouse
+					button.addEventListener('pointerdown', playButtonSound, {
+						passive: false,
+					})
 				})
 
 				// Add gamepad button sounds
 				document
 					.querySelectorAll('.dpad-button, .action-button')
 					.forEach((button) => {
-						const originalClick = button.onclick
-
 						// Play gamepad button sound
-						const playButtonSound = () => {
+						const playButtonSound = (e) => {
+							e.preventDefault() // Prevent default to avoid double triggers
 							const buttonSound = new Audio('audio/click.mp3')
 							buttonSound.play()
 						}
 
-						button.addEventListener('mousedown', playButtonSound)
-						button.addEventListener('touchstart', playButtonSound, {
-							passive: true,
-						})
+						// Remove any existing listeners first
+						button.removeEventListener('mousedown', playButtonSound)
+						button.removeEventListener('touchstart', playButtonSound)
 
-						// Keep original click handler for button functionality
-						button.onclick = (e) => {
-							if (originalClick) originalClick.call(button, e)
-						}
+						// Add single event listener that handles both touch and mouse
+						button.addEventListener('pointerdown', playButtonSound, {
+							passive: false,
+						})
 					})
 
 				// Handle D-pad and action buttons
@@ -1406,11 +1410,22 @@
 					// Handle both Konami code and jump
 					const handlePress = (e) => {
 						e.preventDefault()
+
+						// Handle Konami code
 						handleKonamiInput(action.toLowerCase())
-						handleInput() // Also trigger jump
+
+						// Trigger game input for A or B button press
+						if (window.game && (action === 'A' || action === 'B')) {
+							window.game.handleInput()
+						}
 					}
 
-					button.addEventListener('touchstart', handlePress)
+					// Remove any existing listeners
+					button.removeEventListener('touchstart', handlePress)
+					button.removeEventListener('mousedown', handlePress)
+
+					// Add new listeners
+					button.addEventListener('touchstart', handlePress, { passive: false })
 					button.addEventListener('mousedown', handlePress)
 				})
 
@@ -1507,13 +1522,18 @@
 			}
 
 			// Update reset button click handler
-			document.getElementById('resetButton').onclick = () => {
+			document.getElementById('resetButton').onclick = (e) => {
+				e.preventDefault()
+
 				// Prevent multiple clicks
 				const resetButton = document.getElementById('resetButton')
-				if (resetButton) resetButton.onclick = null
+				if (resetButton) {
+					resetButton.onclick = null
+					resetButton.style.pointerEvents = 'none'
+				}
 
 				// Play turn off sound
-				const turnOffSound = new Audio('audio/turn-off.wav')
+				const turnOffSound = new Audio('audio/turn-off.mp3')
 				turnOffSound.play()
 
 				// Power down sequence
