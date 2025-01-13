@@ -1,54 +1,7 @@
-// Import CRT effect
-import { CRTEffect } from './shaders.js'
-
 // Game constants
-const CHEEKS_SIZE = 32 // Base size for cheeks sprite
+const CHEEKS_SIZE = 64 // Base size for cheeks sprite
 const GRAVITY = 0.4
 const CLAP_SPEED = -8.0
-
-// Early mobile detection - moved to top before any other code
-function isTouchDevice() {
-	return (
-		'ontouchstart' in window ||
-		navigator.maxTouchPoints > 0 ||
-		navigator.msMaxTouchPoints > 0
-	)
-}
-
-// Add iOS detection
-function isIOSDevice() {
-	return (
-		[
-			'iPad Simulator',
-			'iPhone Simulator',
-			'iPod Simulator',
-			'iPad',
-			'iPhone',
-			'iPod',
-		].includes(navigator.platform) ||
-		(navigator.userAgent.includes('Mac') && 'ontouchend' in document)
-	)
-}
-
-const isMobileDevice = isTouchDevice()
-const isIOS = isIOSDevice()
-console.log('Mobile device:', isMobileDevice, 'iOS:', isIOS)
-
-// Game objects
-let cheeks
-let gloves
-let images = {
-	cheeksImage: null,
-	armImage: null,
-	crowdImage: null,
-}
-let audio = {
-	clapSounds: [],
-	cheer: null,
-	boo: null,
-}
-
-// Constants
 const GLOVE_WIDTH = 50
 let GLOVE_OPENING = 250
 const GLOVE_SET_GAP = 0.65 // Percentage of screen width between arm sets
@@ -56,674 +9,1066 @@ const GLOVE_SPEED = 4.0
 const KNOCKOUT_DELAY = 1500
 const SPEED_INCREASE = 0.08
 const MAX_SPEED = 1.6
-
-// Game variables
-let gameCanvas
-let gl
-let crtEffect
-let monitorFrame
-let gameStarted = false
-let gameOver = false
-let score = 0
-let totalScore = 0
-let roundsLeft = 3
-let currentRound = 1
-let knockoutTime = 0
-let lastFrameTime = 0
-let gameStartDelay = 800
-let gameStartTime = 0
-let gameSpeed = 1
-let lastSpeedIncreaseScore = 0
-let mouseX = 0
-let mouseY = 0
-let isHandlingClick = false
-let squishStartTime = 0
-let firstAction = false
-let hasEverActed = false
 const SQUISH_DURATION = 100
+const BASE_UNIT = 32 // Base unit for sizing elements
+const VIRTUAL_WIDTH = BASE_UNIT * 24 // Reduced from 32 to make game taller
+const VIRTUAL_HEIGHT = BASE_UNIT * 20 // Increased from 18 to make game taller
 
-// Initialize game scale
-window.gameScale = {
-	x: window.innerWidth,
-	y: window.innerHeight,
-	min: Math.min(window.innerWidth, window.innerHeight),
-	max: Math.max(window.innerWidth, window.innerHeight),
-	unit: Math.min(window.innerWidth, window.innerHeight) / 20,
-	width: window.innerWidth,
-	height: window.innerHeight,
-	dpr: window.devicePixelRatio || 1,
+// Game state
+const gameState = {
+	gameStarted: false,
+	gameOver: false,
+	score: 0,
+	totalScore: 0,
+	roundsLeft: 3,
+	currentRound: 1,
+	knockoutTime: 0,
+	gameStartDelay: 800,
+	gameStartTime: 0,
+	gameSpeed: 1,
+	lastSpeedIncreaseScore: 0,
+	squishStartTime: 0,
+	firstAction: false,
+	hasEverActed: false,
 }
 
-// Initialize function
-async function init() {
-	console.log('Initializing game components...')
-
-	try {
-		// Get canvas element
-		gameCanvas = document.getElementById('gameCanvas')
-		monitorFrame = document.querySelector('.monitor-frame')
-
-		if (!gameCanvas) {
-			throw new Error('Game canvas not found')
-		}
-
-		if (!monitorFrame) {
-			throw new Error('Monitor frame not found')
-		}
-
-		// Initialize game scale with mobile-friendly values
-		const dpr = Math.min(window.devicePixelRatio || 1, 2) // Cap DPR at 2 for mobile
-		window.gameScale = {
-			x: window.innerWidth,
-			y: window.innerHeight,
-			min: Math.min(window.innerWidth, window.innerHeight),
-			max: Math.max(window.innerWidth, window.innerHeight),
-			unit: Math.min(window.innerWidth, window.innerHeight) / 20,
-			width: window.innerWidth,
-			height: window.innerHeight,
-			dpr: dpr,
-			isMobile: isMobileDevice,
-		}
-
-		// Set up canvas container with mobile optimizations
-		const container = gameCanvas.parentElement
-		if (container) {
-			container.style.position = 'absolute'
-			container.style.left = '50%'
-			container.style.top = '50%'
-			container.style.transform = 'translate(-50%, -50%)'
-			container.style.display = 'flex'
-			container.style.justifyContent = 'center'
-			container.style.alignItems = 'center'
-			container.style.overflow = 'hidden'
-			container.style.width = '100%'
-			container.style.height = '100%'
-			container.style.touchAction = 'none'
-			container.style.webkitTouchCallout = 'none'
-			container.style.webkitUserSelect = 'none'
-			container.style.userSelect = 'none'
-			container.style.webkitOverflowScrolling = 'touch'
-			container.style.willChange = 'transform'
-		}
-
-		// Set canvas styles with mobile optimizations
-		gameCanvas.style.position = 'absolute'
-		gameCanvas.style.width = '100%'
-		gameCanvas.style.height = '100%'
-		gameCanvas.style.touchAction = 'none'
-		gameCanvas.style.webkitTapHighlightColor = 'transparent'
-		gameCanvas.style.userSelect = 'none'
-		gameCanvas.style.webkitUserSelect = 'none'
-		gameCanvas.style.msTouchAction = 'none'
-		gameCanvas.style.msContentZooming = 'none'
-		gameCanvas.style.willChange = 'transform'
-		gameCanvas.style.backfaceVisibility = 'hidden'
-		gameCanvas.style.webkitBackfaceVisibility = 'hidden'
-		gameCanvas.style.transform = 'translateZ(0)'
-		gameCanvas.style.webkitTransform = 'translateZ(0)'
-
-		// Only initialize WebGL for desktop
-		if (!window.gameScale.isMobile) {
-			// Initialize WebGL context with CRT effect
-			crtEffect = new CRTEffect(gameCanvas)
-			if (!crtEffect || !crtEffect.gl) {
-				throw new Error('Could not initialize WebGL context')
-			}
-
-			// Use the WebGL context for all rendering
-			gl = crtEffect.gl
-			console.log('WebGL context initialized')
-		} else {
-			console.log('Mobile device detected, skipping WebGL initialization')
-			// Get 2D context for mobile
-			const ctx = gameCanvas.getContext('2d', {
-				alpha: false,
-				desynchronized: true,
-				willReadFrequently: false,
-			})
-			if (!ctx) {
-				throw new Error('Could not get 2D context')
-			}
-			console.log('2D context initialized for mobile')
-		}
-
-		// Set initial canvas dimensions
-		handleResize()
-
-		// Add resize event listeners with debouncing for mobile
-		let resizeTimeout
-		const handleResizeWithDebounce = () => {
-			if (resizeTimeout) {
-				clearTimeout(resizeTimeout)
-			}
-			resizeTimeout = setTimeout(handleResize, 250)
-		}
-
-		window.addEventListener('resize', handleResizeWithDebounce)
-		window.addEventListener('orientationchange', () => {
-			setTimeout(handleResize, 500)
-		})
-
-		// Rest of initialization
-		console.log('Loading game assets...')
-		await loadImages()
-		console.log('Images loaded')
-		await initAudio()
-		console.log('Audio initialized')
-		initGameObjects()
-		console.log('Game objects initialized')
-		initInputHandlers()
-		console.log('Input handlers initialized')
-		startGame()
-		console.log('Game started')
-
-		// Set initial timestamp
-		lastFrameTime = performance.now()
-
-		return true
-	} catch (error) {
-		console.error('Initialization error:', error)
-		return false
-	}
+// Audio state
+let audio = {
+	clapAssets: [],
+	cheerAsset: null,
+	booAsset: null,
+	initialized: false,
+	context: null,
 }
-
-// Update resize handler
-function handleResize() {
-	if (!gameCanvas || !monitorFrame) return
-
-	// Get container dimensions
-	const container = gameCanvas.parentElement
-	if (!container) return
-
-	// Force a small delay to ensure proper dimensions after orientation change
-	setTimeout(() => {
-		const containerRect = container.getBoundingClientRect()
-
-		// Use screen width for iOS devices when window.innerWidth is unreliable
-		let containerWidth = containerRect.width
-		let containerHeight = containerRect.height
-
-		if (isIOS && (containerWidth === 0 || !containerWidth)) {
-			console.log('Using screen dimensions for iOS device')
-			// Use screen dimensions, accounting for orientation
-			if (window.orientation === 90 || window.orientation === -90) {
-				containerWidth = screen.height
-				containerHeight = screen.width
-			} else {
-				containerWidth = screen.width
-				containerHeight = screen.height
-			}
-		}
-
-		// Calculate device pixel ratio
-		const dpr = Math.min(window.devicePixelRatio || 1, 2)
-
-		// Set canvas dimensions to match container
-		const width = containerWidth
-		const height = containerHeight
-
-		// Debug log dimensions
-		console.log('Resize dimensions:', {
-			container: { width: containerWidth, height: containerHeight },
-			screen: { width: screen.width, height: screen.height },
-			window: {
-				innerWidth: window.innerWidth,
-				innerHeight: window.innerHeight,
-				orientation: window.orientation,
-			},
-			isIOS,
-		})
-
-		// Set display size (CSS pixels)
-		gameCanvas.style.width = '100%'
-		gameCanvas.style.height = '100%'
-		gameCanvas.style.left = '0'
-		gameCanvas.style.top = '0'
-
-		// Set actual size in memory (scaled for DPI)
-		const actualWidth = Math.floor(width * dpr)
-		const actualHeight = Math.floor(height * dpr)
-
-		// Only update if dimensions have changed
-		if (
-			gameCanvas.width !== actualWidth ||
-			gameCanvas.height !== actualHeight
-		) {
-			gameCanvas.width = actualWidth
-			gameCanvas.height = actualHeight
-		}
-
-		// Calculate new base unit for responsive UI sizing
-		const baseUnit = Math.min(width, height) / 20
-
-		// Update game scale factors for responsive drawing
-		window.gameScale = {
-			x: width,
-			y: height,
-			min: Math.min(width, height),
-			max: Math.max(width, height),
-			unit: baseUnit,
-			width: width,
-			height: height,
-			dpr: dpr,
-			isMobile: isMobileDevice,
-			isIOS: isIOS,
-			actualWidth: actualWidth,
-			actualHeight: actualHeight,
-			containerWidth: containerWidth,
-			containerHeight: containerHeight,
-		}
-
-		// Update game object positions for new dimensions
-		if (cheeks) {
-			cheeks.x = width / 3
-			if (!gameStarted) {
-				cheeks.y = height / 2
-			}
-		}
-
-		// Update glove gaps and positions
-		GLOVE_OPENING = baseUnit * 8
-
-		// Update WebGL viewport if needed (only on desktop)
-		if (!window.gameScale.isMobile && gl) {
-			gl.viewport(0, 0, gameCanvas.width, gameCanvas.height)
-			console.log('WebGL viewport updated:', {
-				width: gameCanvas.width,
-				height: gameCanvas.height,
-				dpr: dpr,
-			})
-		}
-
-		// Add debug overlay
-		updateDebugOverlay()
-	}, 100)
-}
-
-// Update debug overlay to only show on mobile
-function updateDebugOverlay() {
-	// Only show debug overlay on mobile devices
-	if (!window.gameScale.isMobile) {
-		const existingOverlay = document.getElementById('debugOverlay')
-		if (existingOverlay) {
-			existingOverlay.remove()
-		}
-		return
-	}
-
-	let debugOverlay = document.getElementById('debugOverlay')
-	if (!debugOverlay) {
-		debugOverlay = document.createElement('div')
-		debugOverlay.id = 'debugOverlay'
-		debugOverlay.style.position = 'fixed'
-		debugOverlay.style.top = '10px'
-		debugOverlay.style.left = '10px'
-		debugOverlay.style.backgroundColor = 'rgba(0,0,0,0.7)'
-		debugOverlay.style.color = '#fff'
-		debugOverlay.style.padding = '10px'
-		debugOverlay.style.fontFamily = 'monospace'
-		debugOverlay.style.fontSize = '12px'
-		debugOverlay.style.zIndex = '9999'
-		debugOverlay.style.pointerEvents = 'none'
-		document.body.appendChild(debugOverlay)
-	}
-
-	const gs = window.gameScale
-	debugOverlay.innerHTML = `
-		Screen: ${window.innerWidth}x${window.innerHeight}<br>
-		Canvas: ${gs.width}x${gs.height}<br>
-		FPS: ${(1000 / (performance.now() - lastFrameTime)).toFixed(1)}
-	`
-}
-
-// Initialize audio
-async function initAudio() {
-	// Load clap sounds
-	const clapPromises = []
-	for (let i = 1; i <= 9; i++) {
-		const sound = new Audio(`audio/claps/clap${i}.wav`)
-		sound.preload = 'auto'
-		clapPromises.push(
-			new Promise((resolve) => {
-				sound.addEventListener('canplaythrough', resolve, { once: true })
-				sound.addEventListener('error', resolve, { once: true }) // Handle failed loads gracefully
-			})
-		)
-		audio.clapSounds.push(sound)
-	}
-
-	// Load other sounds
-	audio.cheer = new Audio('audio/cheering.wav')
-	audio.cheer.volume = 0.1
-	audio.cheer.loop = true
-
-	audio.boo = new Audio('audio/booing.wav')
-
-	const otherSoundPromises = [
-		new Promise((resolve) => {
-			audio.cheer.addEventListener('canplaythrough', resolve, { once: true })
-			audio.cheer.addEventListener('error', resolve, { once: true })
-		}),
-		new Promise((resolve) => {
-			audio.boo.addEventListener('canplaythrough', resolve, { once: true })
-			audio.boo.addEventListener('error', resolve, { once: true })
-		}),
-	]
-
-	// Wait for all sounds to load
-	await Promise.all([...clapPromises, ...otherSoundPromises])
-}
-
-// Audio playback functions
 let currentClapSound = 0
 
-function playFlapSound() {
-	if (!audio.clapSounds[currentClapSound]) return
+// Game objects
+class Game {
+	constructor() {
+		// Create PixiJS application immediately with correct settings
+		this.app = new PIXI.Application({
+			width: window.innerWidth,
+			height: window.innerHeight,
+			backgroundAlpha: 0,
+			backgroundColor: 0x000044,
+			resolution: Math.min(window.devicePixelRatio || 1, 2),
+			antialias: false,
+			view: document.getElementById('gameCanvas'),
+			autoDensity: true,
+			resizeTo: document.getElementById('gameCanvas').parentElement,
+		})
 
-	audio.clapSounds[currentClapSound].pause()
-	audio.clapSounds[currentClapSound].currentTime = 0
+		// Create separate containers for game and UI
+		this.gameContainer = new PIXI.Container()
+		this.uiContainer = new PIXI.Container()
+		this.app.stage.addChild(this.gameContainer)
+		this.app.stage.addChild(this.uiContainer)
 
-	try {
-		audio.clapSounds[currentClapSound]
-			.play()
-			.catch((e) => console.log('Sound play failed:', e))
-	} catch (e) {
-		console.log('Sound play error:', e)
+		// Setup game containers with proper hierarchy
+		this.background = new PIXI.Container()
+		this.gameLayer = new PIXI.Container()
+		this.gloves = new PIXI.Container()
+		this.gloves.pairs = []
+		this.hud = new PIXI.Container()
+
+		// Set up container hierarchy
+		this.gameContainer.addChild(this.background)
+		this.gameContainer.addChild(this.gameLayer)
+		this.gameLayer.addChild(this.gloves)
+		this.uiContainer.addChild(this.hud)
+
+		// Add resize handler
+		window.addEventListener('resize', () => this.handleResize())
+		// Initial resize to set up layout
+		this.handleResize()
+
+		// Show loading screen immediately
+		this.showQuickStartScreen()
+
+		// Initialize game after font loads
+		this.initializeGame()
 	}
 
-	currentClapSound = (currentClapSound + 1) % audio.clapSounds.length
-}
+	showQuickStartScreen() {
+		// Clear any existing HUD content
+		this.hud.removeChildren()
 
-function playCheerSound() {
-	if (!audio.cheer) return
+		const width = this.app.screen.width
+		const height = this.app.screen.height
+		const fontSize = Math.min(height / 10, width / 20)
 
-	if (audio.cheer.currentTime === 0 || !audio.cheer.paused) {
-		audio.cheer.currentTime = 0
+		// Create loading text
+		const loadingText = new PIXI.Text('LOADING...', {
+			fontFamily: 'Press Start 2P',
+			fontSize: fontSize,
+			fill: 0xffffff,
+			align: 'center',
+		})
+
+		// Center the text
+		loadingText.anchor.set(0.5)
+		loadingText.x = width / 2
+		loadingText.y = height / 2
+
+		// Add to HUD
+		this.hud.addChild(loadingText)
+
+		// Store reference to remove later
+		this.loadingText = loadingText
+
+		// Create background
+		this.createBackground()
+
+		// Initialize filters immediately
+		try {
+			if (PIXI.filters) {
+				// Create CRT filter with subtle settings
+				this.crtFilter = new PIXI.filters.CRTFilter({
+					curvature: 2,
+					lineWidth: 1,
+					lineContrast: 0.15,
+					verticalLine: false,
+					noise: 0.1,
+					noiseSize: 1,
+					seed: Math.random(),
+					vignetting: 0.2,
+					vignettingAlpha: 0.5,
+					vignettingBlur: 0.5,
+					time: 0,
+				})
+
+				// Create Bloom filter for subtle glow
+				this.bloomFilter = new PIXI.filters.BloomFilter({
+					strength: 0.3,
+					quality: 4,
+					blur: 1,
+					brightness: 1,
+				})
+
+				// Apply filters to the root stage to affect all UI elements
+				this.app.stage.filters = [this.bloomFilter, this.crtFilter]
+
+				// Enable hardware acceleration for better filter performance
+				this.app.renderer.view.style.transform = 'translateZ(0)'
+
+				console.log('Filters initialized early')
+			}
+		} catch (error) {
+			console.warn('Failed to initialize filters early:', error)
+		}
 	}
-	audio.cheer.play().catch((e) => console.log('Cheer sound failed:', e))
-}
 
-function stopCheerSound() {
-	if (!audio.cheer) return
+	async initializeGame() {
+		try {
+			console.log('Starting game initialization...')
 
-	audio.cheer.pause()
-	audio.cheer.currentTime = 0
-}
+			// Show loading screen first
+			this.showQuickStartScreen()
 
-function playKnockoutSound() {
-	if (!audio.boo) return
+			// Wait for font to load first
+			try {
+				await document.fonts.load('10px "Press Start 2P"')
+				console.log('Font loaded successfully')
+			} catch (err) {
+				console.warn('Font loading failed:', err)
+			}
 
-	stopCheerSound()
-	audio.boo.currentTime = 0
-	audio.boo.play().catch((e) => console.log('Boo sound failed:', e))
-}
+			// Initialize assets
+			console.log('Setting up asset bundles...')
+			const manifest = {
+				bundles: [
+					{
+						name: 'essential',
+						assets: [
+							{ name: 'cheeks', srcs: 'images/cheeks.png' },
+							{ name: 'arm', srcs: 'images/arm.png' },
+						],
+					},
+					{
+						name: 'audio',
+						assets: [
+							...Array.from({ length: 9 }, (_, i) => ({
+								name: `clap${i + 1}`,
+								srcs: `audio/claps/clap${i + 1}.mp3`,
+							})),
+							{ name: 'cheer', srcs: 'audio/cheering.mp3' },
+							{ name: 'boo', srcs: 'audio/booing.mp3' },
+							{ name: 'konami', srcs: 'audio/konami.mp3' },
+						],
+					},
+				],
+			}
 
-// Start game function
-function startGame() {
-	score = 0
-	gameSpeed = 1
-	lastSpeedIncreaseScore = 0
-	firstAction = false
-	// Reset share button state when new game starts
-	window.shareData = null
+			// Initialize assets with manifest
+			await PIXI.Assets.init({ manifest })
 
-	if (cheeks) {
-		cheeks.x = window.gameScale ? window.gameScale.width / 3 : CANVAS_WIDTH / 3
-		cheeks.y = window.gameScale
-			? window.gameScale.height / 2
-			: CANVAS_HEIGHT / 2
-		cheeks.velocity = 0
+			// Load essential assets first
+			console.log('Loading essential assets...')
+			const essentialAssets = await PIXI.Assets.loadBundle('essential')
+			if (!essentialAssets) {
+				throw new Error('Failed to load essential assets')
+			}
+
+			// Initialize game objects and input handlers
+			console.log('Initializing game objects...')
+			this.initGameObjects()
+			this.initInputHandlers()
+
+			// Load audio assets in background
+			console.log('Loading audio assets...')
+			PIXI.Assets.loadBundle('audio')
+				.then(async (audioAssets) => {
+					try {
+						await this.initializeAudio(audioAssets)
+					} catch (error) {
+						console.warn('Failed to initialize audio:', error)
+						audio.initialized = true
+					}
+				})
+				.catch((error) => {
+					console.warn('Failed to load audio assets:', error)
+					audio.initialized = true
+				})
+
+			// Start game loop
+			console.log('Starting game loop...')
+			this.app.ticker.add(() => this.gameLoop(1))
+
+			// Remove loading screen and show title screen
+			console.log('Showing title screen...')
+			if (this.loadingText) {
+				this.loadingText.parent.removeChild(this.loadingText)
+			}
+			this.updateHUD()
+
+			console.log('Game initialization complete')
+		} catch (error) {
+			console.error('Failed to initialize game:', error)
+			this.showErrorScreen('Failed to initialize game: ' + error.message)
+		}
 	}
 
-	if (gloves) {
-		gloves.pairs = []
-		gloves.spawn()
+	handleResize() {
+		const parent = this.app.view.parentElement
+		const parentWidth = parent.clientWidth
+		const parentHeight = parent.clientHeight
+
+		// Update app renderer size
+		this.app.renderer.resize(parentWidth, parentHeight)
+
+		// Calculate scale to fit parent while maintaining aspect ratio
+		const scale = Math.min(
+			parentWidth / VIRTUAL_WIDTH,
+			parentHeight / VIRTUAL_HEIGHT
+		)
+
+		// Scale and center the game container
+		this.gameContainer.scale.set(scale)
+		this.gameContainer.position.set(
+			(parentWidth - VIRTUAL_WIDTH * scale) / 2,
+			(parentHeight - VIRTUAL_HEIGHT * scale) / 2
+		)
+
+		// Update UI container to use actual screen dimensions
+		this.uiContainer.scale.set(1)
+		this.uiContainer.position.set(0, 0)
+
+		// Update game objects positions
+		if (this.cheeks) {
+			this.cheeks.x = VIRTUAL_WIDTH / 3
+			if (!gameState.gameStarted) {
+				this.cheeks.y = VIRTUAL_HEIGHT / 2
+			}
+		}
+
+		// Update crowd sprite if it exists
+		if (this.crowd) {
+			this.crowd.width = VIRTUAL_WIDTH
+			this.crowd.height = BASE_UNIT * 8
+		}
+
+		// Update glove gaps
+		GLOVE_OPENING = BASE_UNIT * 8
+
+		// Update HUD with actual screen dimensions
+		this.updateHUD()
+
+		// Update background
+		this.createBackground()
+
+		// Update debug overlay
+		this.updateDebugOverlay()
 	}
-}
 
-// Load images function
-async function loadImages() {
-	const imagePromises = [
-		loadImage('images/cheeks.png').then((img) => (images.cheeksImage = img)),
-		loadImage('images/arm.png').then((img) => (images.armImage = img)),
-		loadImage('images/crowd.png').then((img) => (images.crowdImage = img)),
-	]
+	// Update all screen width/height references to use BASE_UNIT * 32 for width and BASE_UNIT * 18 for height
+	get screenWidth() {
+		return VIRTUAL_WIDTH
+	}
 
-	await Promise.all(imagePromises)
-}
+	get screenHeight() {
+		return VIRTUAL_HEIGHT
+	}
 
-// Helper function to load a single image
-function loadImage(src) {
-	return new Promise((resolve, reject) => {
-		const img = new Image()
-		img.onload = () => resolve(img)
-		img.onerror = reject
-		img.src = src
-	})
-}
+	updateDebugOverlay() {
+		let debugOverlay = document.getElementById('debugOverlay')
+		if (!debugOverlay) {
+			debugOverlay = document.createElement('div')
+			debugOverlay.id = 'debugOverlay'
+			debugOverlay.style.position = 'fixed'
+			debugOverlay.style.top = '10px'
+			debugOverlay.style.left = '10px'
+			debugOverlay.style.backgroundColor = 'rgba(0,0,0,0.7)'
+			debugOverlay.style.color = '#fff'
+			debugOverlay.style.padding = '10px'
+			debugOverlay.style.fontFamily = 'monospace'
+			debugOverlay.style.fontSize = '12px'
+			debugOverlay.style.zIndex = '10000'
+			debugOverlay.style.pointerEvents = 'none'
+			debugOverlay.style.transform = 'translateZ(0)'
+			document.body.appendChild(debugOverlay)
+		}
 
-// Initialize game objects
-function initGameObjects() {
-	const scale = window.gameScale
-	if (!scale) return
+		// Only update if app is initialized
+		if (!this.app || !this.app.stage) {
+			debugOverlay.innerHTML = 'Initializing...'
+			return
+		}
 
-	const safePadding = Math.max(scale.unit * 3, scale.width * 0.08)
-	const safeWidth = scale.width - safePadding * 2
-	const safeHeight = scale.height - safePadding * 2
+		const fps = Math.round(this.app.ticker.FPS)
+		const scale = this.app.stage.scale.x || 1
+		const virtualWidth = VIRTUAL_WIDTH
+		const virtualHeight = VIRTUAL_HEIGHT
+		const gameSpeed = gameState.gameSpeed || 1
 
-	cheeks = {
-		x: safePadding + safeWidth / 3,
-		y: scale.height / 2,
-		velocity: 0,
-		draw(ctx) {
-			if (!images.cheeksImage || !window.gameScale) return
-			const scale = window.gameScale
+		debugOverlay.innerHTML = `
+			Screen: ${window.innerWidth}x${window.innerHeight}<br>
+			Canvas: ${this.app.screen.width}x${this.app.screen.height}<br>
+			Virtual: ${virtualWidth}x${virtualHeight}<br>
+			Scale: ${scale.toFixed(2)}<br>
+			Speed: ${gameSpeed.toFixed(2)}x<br>
+			FPS: ${fps}
+		`
+	}
 
-			ctx.save()
-			ctx.translate(this.x, this.y)
+	async loadAssets() {
+		try {
+			// Set base URL for assets
+			const baseURL = window.location.href.substring(
+				0,
+				window.location.href.lastIndexOf('/') + 1
+			)
 
-			// Calculate squish scale based on time
-			let xScale = 1
-			if (squishStartTime > 0) {
-				const elapsed = performance.now() - squishStartTime
-				if (elapsed < SQUISH_DURATION) {
-					const progress = elapsed / SQUISH_DURATION
-					xScale = 1 - 0.3 * Math.sin(progress * Math.PI)
-				} else {
-					squishStartTime = 0
+			// Load textures with error handling and timeout
+			const loadTextureWithTimeout = async (url, timeout = 5000) => {
+				try {
+					const texturePromise = PIXI.Assets.load(url)
+					const timeoutPromise = new Promise((_, reject) =>
+						setTimeout(() => reject(new Error('Timeout')), timeout)
+					)
+					return await Promise.race([texturePromise, timeoutPromise])
+				} catch (error) {
+					console.error(`Failed to load texture ${url}:`, error)
+					return null
 				}
 			}
 
-			// Scale based on screen size
-			const size = Math.min(scale.width, scale.height) / 15
-			ctx.scale(
-				xScale * (size / CHEEKS_SIZE),
-				(1 + (1 - xScale) * 0.5) * (size / CHEEKS_SIZE)
+			console.log('Loading textures...')
+			const [cheeksTexture, armTexture, crowdTexture] = await Promise.all([
+				loadTextureWithTimeout(baseURL + 'images/cheeks.png'),
+				loadTextureWithTimeout(baseURL + 'images/arm.png'),
+				loadTextureWithTimeout(baseURL + 'images/crowd.png'),
+			])
+
+			// For mobile, just store the audio URLs for later use
+			const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+			if (isMobile) {
+				console.log('Mobile device detected, deferring audio loading')
+				audio.initialized = true
+			} else {
+				// Desktop audio loading
+				try {
+					const audioContext = new (window.AudioContext ||
+						window.webkitAudioContext)()
+
+					const loadAudio = async (url) => {
+						try {
+							const response = await fetch(url)
+							const arrayBuffer = await response.arrayBuffer()
+							return await audioContext.decodeAudioData(arrayBuffer)
+						} catch (error) {
+							console.warn(`Failed to load audio ${url}:`, error)
+							return null
+						}
+					}
+
+					// Load all audio files
+					console.log('Loading audio files...')
+					const audioBuffers = {
+						claps: await Promise.all(
+							Array.from({ length: 9 }, (_, i) =>
+								loadAudio(baseURL + `audio/claps/clap${i + 1}.mp3`)
+							)
+						),
+						cheer: await loadAudio(baseURL + 'audio/cheering.mp3'),
+						boo: await loadAudio(baseURL + 'audio/booing.mp3'),
+					}
+
+					audio.clapBuffers = audioBuffers.claps.filter(
+						(buffer) => buffer !== null
+					)
+					audio.cheerBuffer = audioBuffers.cheer
+					audio.booBuffer = audioBuffers.boo
+					audio.context = audioContext
+					audio.initialized = true
+
+					console.log('Audio loaded:', {
+						claps: audio.clapBuffers.length,
+						cheer: !!audio.cheerBuffer,
+						boo: !!audio.booBuffer,
+					})
+				} catch (error) {
+					console.warn('Error loading audio:', error)
+					audio.initialized = true
+				}
+			}
+
+			// Only wait for textures
+			if (!cheeksTexture || !armTexture) {
+				throw new Error('Failed to load essential textures')
+			}
+
+			console.log('Essential assets loaded')
+			return true
+		} catch (error) {
+			console.error('Error loading assets:', error)
+			return false
+		}
+	}
+
+	async initGameObjects() {
+		// Create crowd sprite
+		const crowdTexture = PIXI.Assets.get('crowd')
+		if (crowdTexture) {
+			this.crowd = new PIXI.TilingSprite(
+				crowdTexture,
+				this.app.screen.width,
+				BASE_UNIT * 8
+			)
+			this.crowd.alpha = 0.6
+			this.background.addChild(this.crowd)
+		}
+
+		// Create cheeks sprite
+		const cheeksTexture = PIXI.Assets.get('cheeks')
+		if (cheeksTexture) {
+			console.log('Creating cheeks sprite with texture')
+			this.cheeks = new PIXI.Sprite(cheeksTexture)
+			this.cheeks.anchor.set(0.5)
+			this.cheeks.x = this.app.screen.width / 3
+			this.cheeks.y = this.app.screen.height / 2
+			this.cheeks.velocity = 0
+			this.cheeks.scale.set(BASE_UNIT / CHEEKS_SIZE)
+			this.gameLayer.addChild(this.cheeks)
+		} else {
+			console.warn('Cheeks texture not found, using fallback shape')
+			this.cheeks = new PIXI.Graphics()
+			this.cheeks.beginFill(0xffa500)
+			this.cheeks.drawCircle(0, 0, BASE_UNIT)
+			this.cheeks.endFill()
+			this.cheeks.x = this.app.screen.width / 3
+			this.cheeks.y = this.app.screen.height / 2
+			this.cheeks.velocity = 0
+			this.gameLayer.addChild(this.cheeks)
+		}
+
+		// Add gloves container to gameLayer
+		this.gameLayer.addChild(this.gloves)
+	}
+
+	updateGrid(graphics) {
+		// Get actual canvas dimensions
+		const canvas = this.app.view
+		const width = canvas.width
+		const height = canvas.height
+
+		// Clear any existing graphics
+		graphics.clear()
+
+		// Calculate grid dimensions with margin to ensure full canvas coverage
+		const gridSpacing = BASE_UNIT * 1.2
+		const margin = Math.max(width, height) * 0.2
+		const totalWidth = width + margin * 2
+		const totalHeight = height + margin * 2
+
+		// Fill background to match grid size
+		graphics.beginFill(0x000044)
+		graphics.drawRect(-margin, -margin, totalWidth, totalHeight)
+		graphics.endFill()
+
+		// Thinner, more visible lines
+		graphics.lineStyle(Math.max(1, BASE_UNIT / 30), 0x4444ff, 0.15)
+
+		// Draw horizontal lines
+		const horizontalLines = Math.ceil(totalHeight / gridSpacing)
+		for (let i = 0; i <= horizontalLines; i++) {
+			const baseY = i * gridSpacing - margin
+			graphics.moveTo(-margin, baseY)
+			graphics.lineTo(width + margin, baseY)
+		}
+
+		// Draw vertical lines
+		const verticalLines = Math.ceil(totalWidth / gridSpacing)
+		for (let i = 0; i <= verticalLines; i++) {
+			const baseX = i * gridSpacing - margin
+			graphics.moveTo(baseX, -margin)
+			graphics.lineTo(baseX, height + margin)
+		}
+	}
+
+	updateRing() {
+		this.ring.removeChildren()
+
+		const width = this.screenWidth
+		const height = this.screenHeight
+
+		// Ring elements
+		const insetX = BASE_UNIT * 1.5
+		const ringTop = BASE_UNIT * 4
+		const ringBottom = height + BASE_UNIT * 2
+		const postWidth = BASE_UNIT * 0.8
+		const postHeight = BASE_UNIT * 3
+
+		// Ring floor
+		const floor = new PIXI.Graphics()
+		floor.beginFill(0x00cec4)
+		floor.moveTo(insetX, ringTop)
+		floor.lineTo(width - insetX, ringTop)
+		floor.lineTo(width + BASE_UNIT * 8, ringBottom)
+		floor.lineTo(-BASE_UNIT * 8, ringBottom)
+		floor.endFill()
+		this.ring.addChild(floor)
+
+		// Ring posts
+		const posts = new PIXI.Graphics()
+		posts.beginFill(0xffffff)
+		posts.drawRect(
+			insetX * 1.5,
+			ringTop - postHeight / 2,
+			postWidth,
+			postHeight
+		)
+		posts.drawRect(
+			width - insetX * 1.5 - postWidth,
+			ringTop - postHeight / 2,
+			postWidth,
+			postHeight
+		)
+		posts.endFill()
+		this.ring.addChild(posts)
+
+		// Ring ropes
+		const ropes = new PIXI.Graphics()
+		ropes.lineStyle(Math.max(BASE_UNIT / 6, 2), 0xff69b4)
+
+		for (let i = 0; i < 3; i++) {
+			const topY = ringTop - postHeight * 0.6 + (i + 1) * (postHeight / 3)
+			const bottomY = ringBottom - i * BASE_UNIT
+
+			// Left side rope
+			ropes.moveTo(insetX * 1.5 + postWidth / 2, topY)
+			ropes.lineTo(-BASE_UNIT * 6 + i * BASE_UNIT * 2, bottomY)
+
+			// Right side rope
+			ropes.moveTo(width - insetX * 1.5 - postWidth / 2, topY)
+			ropes.lineTo(width + BASE_UNIT * 6 - i * BASE_UNIT * 2, bottomY)
+
+			// Top rope
+			ropes.moveTo(insetX * 1.5 + postWidth / 2, topY)
+			ropes.lineTo(width - insetX * 1.5 - postWidth / 2, topY)
+
+			// Bottom rope
+			ropes.moveTo(-BASE_UNIT * 6 + i * BASE_UNIT * 2, bottomY)
+			ropes.lineTo(width + BASE_UNIT * 6 - i * BASE_UNIT * 2, bottomY)
+		}
+		this.ring.addChild(ropes)
+	}
+
+	updateHUD() {
+		// Remove existing ticker handlers
+		if (this.hud.children) {
+			this.hud.children.forEach((child) => {
+				if (child._blinkHandler) {
+					this.app.ticker.remove(child._blinkHandler)
+				}
+				if (child._moveHandler) {
+					this.app.ticker.remove(child._moveHandler)
+				}
+			})
+		}
+
+		// Clear existing HUD
+		this.hud.removeChildren()
+
+		// Update background for current state
+		this.createBackground()
+
+		// Draw appropriate screen
+		if (!gameState.gameStarted) {
+			this.drawTitleScreen()
+		} else if (gameState.gameOver) {
+			this.drawGameOverScreen()
+		} else {
+			this.drawGameHUD()
+		}
+	}
+
+	drawTitleScreen() {
+		// Use app.screen dimensions to ensure canvas-relative positioning
+		const width = this.app.screen.width
+		const height = this.app.screen.height
+		const maxWidth = width * 0.95 // Increased from 0.9
+		const maxHeight = height * 0.95 // Increased from 0.9
+
+		// Larger base font size
+		const baseFontSize = Math.min(height / 8, width / 10)
+
+		// Hide player/cheeks during title screen
+		if (this.cheeks) {
+			this.cheeks.visible = false
+		}
+
+		// Create main container that will be centered in canvas
+		const mainContainer = new PIXI.Container()
+
+		// Title group
+		const titleGroup = new PIXI.Container()
+
+		const title1 = new PIXI.Text('CLAPPY', {
+			fontFamily: 'Press Start 2P',
+			fontSize: baseFontSize,
+			fill: 0xffa500,
+			align: 'center',
+		})
+		title1.anchor.set(0.5)
+		title1.y = 0
+
+		const title2 = new PIXI.Text('CHEEKS!!', {
+			fontFamily: 'Press Start 2P',
+			fontSize: baseFontSize,
+			fill: 0xffa500,
+			align: 'center',
+		})
+		title2.anchor.set(0.5)
+		title2.y = baseFontSize * 1.2
+
+		// Instructions
+		const instr1 = new PIXI.Text('3 ROUNDS PER MATCH', {
+			fontFamily: 'Press Start 2P',
+			fontSize: baseFontSize * 0.4,
+			fill: 0xffffff,
+			align: 'center',
+		})
+		instr1.anchor.set(0.5)
+		instr1.y = baseFontSize * 2.4
+
+		const instr2 = new PIXI.Text('DODGE PUNCHES FOR POINTS', {
+			fontFamily: 'Press Start 2P',
+			fontSize: baseFontSize * 0.4,
+			fill: 0xffffff,
+			align: 'center',
+		})
+		instr2.anchor.set(0.5)
+		instr2.y = baseFontSize * 3.2
+
+		titleGroup.addChild(title1, title2, instr1, instr2)
+		mainContainer.addChild(titleGroup)
+
+		// Press Space with gloves
+		if (gameState.roundsLeft > 0) {
+			const pressSpaceGroup = new PIXI.Container()
+
+			// Create gloves first
+			const gloveSize = baseFontSize * 1.5
+			const gloveSpacing = baseFontSize * 8
+			const armTexture = PIXI.Assets.get('arm')
+
+			if (armTexture) {
+				// Left glove
+				const leftGlove = new PIXI.Sprite(armTexture)
+				leftGlove.anchor.set(0.5)
+				leftGlove.x = -gloveSpacing
+				leftGlove.y = 0
+				leftGlove.angle = 90
+				leftGlove.scale.x = -1
+				leftGlove.width = gloveSize
+				leftGlove.height = (gloveSize / armTexture.width) * armTexture.height
+				pressSpaceGroup.addChild(leftGlove)
+
+				// Right glove
+				const rightGlove = new PIXI.Sprite(armTexture)
+				rightGlove.anchor.set(0.5)
+				rightGlove.x = gloveSpacing
+				rightGlove.y = 0
+				rightGlove.angle = -90
+				rightGlove.width = gloveSize
+				rightGlove.height = (gloveSize / armTexture.width) * armTexture.height
+				pressSpaceGroup.addChild(rightGlove)
+
+				// Retro-style stepped movement
+				const moveHandler = () => {
+					const time = performance.now()
+					const step = Math.floor(time / 250) % 2
+					const moveAmount = step ? BASE_UNIT * 0.8 : 0
+					leftGlove.x = -gloveSpacing - moveAmount
+					rightGlove.x = gloveSpacing + moveAmount
+				}
+				this.app.ticker.add(moveHandler)
+				leftGlove._moveHandler = moveHandler
+			}
+
+			// Add press space text after gloves
+			const pressSpace = new PIXI.Text('PRESS SPACE', {
+				fontFamily: 'Press Start 2P',
+				fontSize: baseFontSize * 0.6,
+				fill: 0xff0000,
+				align: 'center',
+			})
+			pressSpace.anchor.set(0.5)
+			pressSpaceGroup.addChild(pressSpace)
+
+			// Color alternating effect
+			const blinkHandler = () => {
+				const time = performance.now()
+				pressSpace.style.fill = Math.floor(time / 250) % 2 ? 0xff0000 : 0xffffff
+			}
+			this.app.ticker.add(blinkHandler)
+			pressSpace._blinkHandler = blinkHandler
+
+			pressSpaceGroup.y = baseFontSize * 5
+			mainContainer.addChild(pressSpaceGroup)
+		}
+
+		// Total score
+		if (gameState.totalScore > 0) {
+			const scoreGroup = new PIXI.Container()
+			const totalScoreText = new PIXI.Text(
+				`TOTAL SCORE: ${gameState.totalScore}`,
+				{
+					fontFamily: 'Press Start 2P',
+					fontSize: baseFontSize * 0.4,
+					fill: 0xffffff,
+					align: 'center',
+				}
+			)
+			totalScoreText.anchor.set(0.5)
+			scoreGroup.addChild(totalScoreText)
+			scoreGroup.y = baseFontSize * 6.5
+			mainContainer.addChild(scoreGroup)
+		}
+
+		// Center the main container in canvas and scale if needed
+		mainContainer.x = width / 2
+		mainContainer.y = height * 0.3
+
+		// Get bounds of all content
+		const bounds = mainContainer.getBounds()
+
+		// Calculate scale needed to fit within max dimensions
+		const scale = Math.min(
+			maxWidth / bounds.width,
+			maxHeight / bounds.height,
+			1 // Never scale up
+		)
+
+		// Apply scale if content is too large
+		if (scale < 1) {
+			mainContainer.scale.set(scale)
+		}
+
+		this.hud.addChild(mainContainer)
+		this.drawCopyright()
+	}
+
+	drawGameOverScreen() {
+		const width = this.app.screen.width
+		const height = this.app.screen.height
+		const maxWidth = width * 0.9
+		const maxHeight = height * 0.9
+		const baseFontSize = Math.min(height / 10, width / 12)
+
+		// Create main container for all content
+		const mainContainer = new PIXI.Container()
+		mainContainer.x = width / 2
+		mainContainer.y = height * 0.3
+
+		if (gameState.roundsLeft === 0) {
+			// Final game over screen
+			const knockout = new PIXI.Text('KNOCKOUT!!', {
+				fontFamily: 'Press Start 2P',
+				fontSize: baseFontSize,
+				fill: 0x00005c,
+				align: 'center',
+			})
+			knockout.anchor.set(0.5)
+			knockout.y = 0
+
+			const finalScore = gameState.totalScore + gameState.score
+			const scoreText = `FINAL SCORE: ${finalScore}`
+			const scoreContainer = new PIXI.Graphics()
+			const scoreTextObj = new PIXI.Text(scoreText, {
+				fontFamily: 'Press Start 2P',
+				fontSize: baseFontSize * 0.8,
+				fill: 0x000000,
+				align: 'center',
+			})
+			scoreTextObj.anchor.set(0.5)
+			scoreTextObj.y = baseFontSize * 1.5
+
+			// Add padding around score text
+			const padding = baseFontSize * 0.3
+			scoreContainer.beginFill(0xffffff)
+			scoreContainer.drawRect(
+				-scoreTextObj.width / 2 - padding,
+				scoreTextObj.y - scoreTextObj.height / 2 - padding / 2,
+				scoreTextObj.width + padding * 2,
+				scoreTextObj.height + padding
 			)
 
-			ctx.drawImage(
-				images.cheeksImage,
-				-CHEEKS_SIZE,
-				-CHEEKS_SIZE,
-				CHEEKS_SIZE * 2,
-				CHEEKS_SIZE * 2
+			mainContainer.addChild(scoreContainer, knockout, scoreTextObj)
+		} else {
+			// Round over screen
+			const roundOver1 = new PIXI.Text('ROUND', {
+				fontFamily: 'Press Start 2P',
+				fontSize: baseFontSize,
+				fill: 0x00005c,
+				align: 'center',
+			})
+			roundOver1.anchor.set(0.5)
+			roundOver1.y = 0
+
+			const roundOver2 = new PIXI.Text('OVER!!', {
+				fontFamily: 'Press Start 2P',
+				fontSize: baseFontSize,
+				fill: 0x00005c,
+				align: 'center',
+			})
+			roundOver2.anchor.set(0.5)
+			roundOver2.y = baseFontSize * 1.2
+
+			const roundScore = new PIXI.Text(`ROUND SCORE: ${gameState.score}`, {
+				fontFamily: 'Press Start 2P',
+				fontSize: baseFontSize * 0.6,
+				fill: 0x004643,
+				align: 'center',
+			})
+			roundScore.anchor.set(0.5)
+			roundScore.y = baseFontSize * 2.4
+
+			const totalScoreText = new PIXI.Text(
+				`TOTAL SCORE: ${gameState.totalScore + gameState.score}`,
+				{
+					fontFamily: 'Press Start 2P',
+					fontSize: baseFontSize * 0.6,
+					fill: 0x004643,
+					align: 'center',
+				}
 			)
-			ctx.restore()
-		},
-		update() {
-			if (!window.gameScale) return
+			totalScoreText.anchor.set(0.5)
+			totalScoreText.y = baseFontSize * 3.2
 
-			this.velocity += GRAVITY * gameSpeed
-			this.y += this.velocity * gameSpeed
+			const roundsLeftText = new PIXI.Text(
+				`ROUNDS LEFT: ${gameState.roundsLeft}`,
+				{
+					fontFamily: 'Press Start 2P',
+					fontSize: baseFontSize * 0.6,
+					fill: 0x004643,
+					align: 'center',
+				}
+			)
+			roundsLeftText.anchor.set(0.5)
+			roundsLeftText.y = baseFontSize * 4.0
 
-			if (this.velocity > 4) {
-				this.velocity = 4
+			mainContainer.addChild(
+				roundOver1,
+				roundOver2,
+				roundScore,
+				totalScoreText,
+				roundsLeftText
+			)
+
+			// Press space (after delay)
+			if (performance.now() - gameState.knockoutTime > KNOCKOUT_DELAY) {
+				const pressSpace = new PIXI.Text('PRESS SPACE', {
+					fontFamily: 'Press Start 2P',
+					fontSize: baseFontSize * 0.6,
+					fill: 0xffffff,
+					align: 'center',
+				})
+				pressSpace.anchor.set(0.5)
+				pressSpace.y = baseFontSize * 5.2
+
+				// Blinking effect
+				this.app.ticker.add(() => {
+					pressSpace.visible = Math.floor(performance.now() / 250) % 2
+				})
+
+				mainContainer.addChild(pressSpace)
 			}
-		},
+		}
+
+		// Scale container if needed
+		const bounds = mainContainer.getBounds()
+		const scale = Math.min(
+			maxWidth / bounds.width,
+			maxHeight / bounds.height,
+			1 // Never scale up
+		)
+		if (scale < 1) {
+			mainContainer.scale.set(scale)
+		}
+
+		this.hud.addChild(mainContainer)
+		this.drawCopyright()
 	}
 
-	gloves = {
-		pairs: [],
-		draw(ctx) {
-			if (!images.armImage || !window.gameScale) return
-			const scale = window.gameScale
+	addDecorativeGloves(pressSpaceGroup, menuSize) {
+		const armTexture = PIXI.Assets.get('arm')
+		if (armTexture) {
+			// Force a render update
+			this.app.renderer.render(this.app.stage)
 
-			this.pairs.forEach((pair) => {
-				// Calculate arm dimensions based on screen width while maintaining aspect ratio
-				const armWidth = Math.min(scale.width, scale.height) / 8
-				const armHeight =
-					(armWidth / images.armImage.width) * images.armImage.height
-				const gapHalf = GLOVE_OPENING / 2
+			// Fixed spacing based on menu size rather than text width
+			const gloveSize = menuSize * 2.5
+			const gloveSpacing = menuSize * 12 // Fixed spacing relative to menu size
 
-				// Draw top arm
-				ctx.save()
-				ctx.translate(pair.x, pair.gapY - gapHalf)
-				ctx.rotate(Math.PI) // 180 degrees to point down
-				ctx.scale(
-					armWidth / images.armImage.width,
-					armWidth / images.armImage.width
-				)
-				ctx.drawImage(
-					images.armImage,
-					-images.armImage.width / 2,
-					0,
-					images.armImage.width,
-					images.armImage.height
-				)
-				ctx.restore()
+			// Left glove
+			const leftGlove = new PIXI.Sprite(armTexture)
+			leftGlove.anchor.set(0.5)
+			leftGlove.x = -gloveSpacing / 2
+			leftGlove.y = 0
+			leftGlove.angle = 90
+			leftGlove.scale.x = -1
+			leftGlove.width = gloveSize
+			leftGlove.height = (gloveSize / armTexture.width) * armTexture.height
 
-				// Draw bottom arm
-				ctx.save()
-				ctx.translate(pair.x, pair.gapY + gapHalf)
-				ctx.scale(
-					armWidth / images.armImage.width,
-					armWidth / images.armImage.width
-				)
-				ctx.drawImage(
-					images.armImage,
-					-images.armImage.width / 2,
-					0,
-					images.armImage.width,
-					images.armImage.height
-				)
-				ctx.restore()
-			})
-		},
-		update() {
-			if (!window.gameScale) return
+			// Right glove
+			const rightGlove = new PIXI.Sprite(armTexture)
+			rightGlove.anchor.set(0.5)
+			rightGlove.x = gloveSpacing / 2
+			rightGlove.y = 0
+			rightGlove.angle = -90
+			rightGlove.width = gloveSize
+			rightGlove.height = (gloveSize / armTexture.width) * armTexture.height
 
-			// Don't move gloves during initial delay
-			if (performance.now() - gameStartTime < gameStartDelay) {
-				return
+			pressSpaceGroup.addChild(leftGlove, rightGlove)
+
+			// Retro-style stepped movement
+			const moveHandler = () => {
+				const time = performance.now()
+				// Use step function instead of sine for retro feel
+				const step = Math.floor(time / 250) % 2
+				const moveAmount = step ? BASE_UNIT * 0.8 : 0
+				leftGlove.x = -gloveSpacing / 2 - moveAmount
+				rightGlove.x = gloveSpacing / 2 + moveAmount
 			}
+			this.app.ticker.add(moveHandler)
+			leftGlove._moveHandler = moveHandler
 
-			const speed =
-				GLOVE_SPEED * gameSpeed * (window.gameScale.width / CANVAS_WIDTH)
-
-			this.pairs.forEach((pair) => {
-				pair.x -= speed
-			})
-
-			this.pairs = this.pairs.filter((pair) => pair.x + GLOVE_WIDTH > 0)
-
-			// Increase spacing between arm pairs
-			const minSpacing = window.gameScale.width * GLOVE_SET_GAP
-			if (
-				this.pairs.length === 0 ||
-				this.pairs[this.pairs.length - 1].x <
-					window.gameScale.width - minSpacing
-			) {
-				this.spawn()
-			}
-		},
-		spawn() {
-			if (!window.gameScale) return
-
-			const scale = window.gameScale
-			const safePadding = Math.max(scale.unit * 3, scale.width * 0.08)
-			const safeHeight = scale.height - safePadding * 2
-
-			// Increase minimum gap between arms
-			GLOVE_OPENING = Math.min(scale.height * 0.35, scale.unit * 10)
-
-			// Adjust the spawn range to prevent arms from being too close to edges
-			const minY = safePadding + GLOVE_OPENING * 0.8 // More padding from top
-			const maxY = scale.height - safePadding - GLOVE_OPENING * 0.8 // More padding from bottom
-			let y = Math.random() * (maxY - minY) + minY
-
-			// Spawn gloves slightly beyond the right edge to prevent pop-in
-			this.pairs.push({
-				x: scale.width + safePadding,
-				gapY: y,
-				passed: false,
-			})
-		},
-	}
-}
-
-// Input handling
-function handleInput() {
-	if (!gameStarted) {
-		if (roundsLeft > 0) {
-			gameStarted = true
-			gameStartTime = performance.now()
-			playCheerSound()
-		}
-	} else if (gameOver && performance.now() - knockoutTime > KNOCKOUT_DELAY) {
-		if (roundsLeft > 0) {
-			totalScore += score
-			currentRound++
-			startGame()
-			gameStarted = true
-			gameOver = false
-			firstAction = false
-			gameStartTime = performance.now()
-			playCheerSound()
-		}
-	} else if (!gameOver) {
-		if (cheeks) {
-			firstAction = true
-			hasEverActed = true
-			cheeks.velocity = CLAP_SPEED
-			squishStartTime = performance.now()
-			playFlapSound()
+			// Force another render to ensure gloves are visible
+			this.app.renderer.render(this.app.stage)
 		}
 	}
-}
 
-// Initialize input handlers
-function initInputHandlers() {
-	// Keyboard controls
-	window.addEventListener('keydown', (e) => {
-		if (e.code === 'Space') {
-			e.preventDefault()
-			handleInput()
+	drawGameHUD() {
+		const width = this.app.screen.width
+		const height = this.app.screen.height
+		const fontSize = Math.min(width / 40, height / 20)
+		const padding = fontSize * 0.75
+
+		// Clear existing HUD
+		this.hud.removeChildren()
+
+		// Points display (top left)
+		const pointsText = `POINTS: ${gameState.score}`
+		const pointsStyle = {
+			fontFamily: 'Press Start 2P',
+			fontSize: fontSize,
+			fill: 0x000000,
+			align: 'left',
 		}
-	})
 
-	// Mouse/touch controls with better mobile handling
-	if (gameCanvas) {
-		// Prevent all default touch behaviors
-		gameCanvas.addEventListener('touchstart', (e) => e.preventDefault(), {
+		const pointsContainer = new PIXI.Graphics()
+		const pointsLabel = new PIXI.Text(pointsText, pointsStyle)
+		const pointsWidth = pointsLabel.width + padding * 2
+		const hudHeight = fontSize * 1.5
+
+		pointsContainer.beginFill(0x98ff98)
+		pointsContainer.drawRect(0, 0, pointsWidth, hudHeight)
+		pointsLabel.position.set(padding, hudHeight / 2)
+		pointsLabel.anchor.set(0, 0.5)
+
+		// Rounds display (top right)
+		const roundsText = `ROUND ${gameState.currentRound}`
+		const roundsStyle = {
+			fontFamily: 'Press Start 2P',
+			fontSize: fontSize,
+			fill: 0xffffff,
+			align: 'right',
+		}
+
+		const roundsContainer = new PIXI.Graphics()
+		const roundsLabel = new PIXI.Text(roundsText, roundsStyle)
+		const roundsWidth = roundsLabel.width + padding * 2
+
+		roundsContainer.beginFill(0x000000)
+		roundsContainer.drawRect(0, 0, roundsWidth, hudHeight)
+		roundsLabel.position.set(width - padding, hudHeight / 2)
+		roundsLabel.anchor.set(1, 0.5)
+
+		// Position containers
+		const margin = fontSize
+		pointsContainer.position.set(margin, margin)
+		roundsContainer.position.set(width - roundsWidth - margin, margin)
+
+		// Add containers and labels to HUD
+		const pointsGroup = new PIXI.Container()
+		pointsGroup.addChild(pointsContainer, pointsLabel)
+		const roundsGroup = new PIXI.Container()
+		roundsGroup.addChild(roundsContainer, roundsLabel)
+
+		this.hud.addChild(pointsGroup, roundsGroup)
+	}
+
+	initInputHandlers() {
+		// Keyboard controls
+		window.addEventListener('keydown', (e) => {
+			if (e.code === 'Space') {
+				e.preventDefault()
+				this.handleInput()
+			}
+		})
+
+		// Mouse/touch controls
+		const canvas = this.app.view
+		canvas.addEventListener('touchstart', (e) => e.preventDefault(), {
 			passive: false,
 		})
-		gameCanvas.addEventListener('touchmove', (e) => e.preventDefault(), {
+		canvas.addEventListener('touchmove', (e) => e.preventDefault(), {
 			passive: false,
 		})
-		gameCanvas.addEventListener('touchend', (e) => e.preventDefault(), {
+		canvas.addEventListener('touchend', (e) => e.preventDefault(), {
 			passive: false,
 		})
-		gameCanvas.addEventListener('touchcancel', (e) => e.preventDefault(), {
+		canvas.addEventListener('touchcancel', (e) => e.preventDefault(), {
 			passive: false,
 		})
 
-		// Handle clicks and touches
-		gameCanvas.addEventListener('click', handleInput)
-		gameCanvas.addEventListener('touchstart', handleInput)
+		canvas.addEventListener('click', () => this.handleInput())
+		canvas.addEventListener('touchstart', () => this.handleInput())
 
-		// Prevent double-tap zoom on mobile
+		// Prevent double-tap zoom
 		let lastTap = 0
-		gameCanvas.addEventListener('touchend', (e) => {
+		canvas.addEventListener('touchend', (e) => {
 			const currentTime = new Date().getTime()
 			const tapLength = currentTime - lastTap
 			if (tapLength < 500 && tapLength > 0) {
@@ -732,706 +1077,690 @@ function initInputHandlers() {
 			lastTap = currentTime
 		})
 
-		// Prevent scrolling on mobile
+		// Prevent scrolling
 		document.body.style.overflow = 'hidden'
 		document.documentElement.style.overflow = 'hidden'
 		document.body.style.position = 'fixed'
 		document.body.style.width = '100%'
 		document.body.style.height = '100%'
 	}
-}
 
-// Update game loop to optimize WebGL rendering
-function gameLoop(timestamp) {
-	// Calculate delta time and cap it
-	const deltaTime = Math.min(timestamp - lastFrameTime, 32)
-	const timeScale = deltaTime / 16.667
-
-	// Only update debug overlay on mobile
-	if (
-		window.gameScale.isMobile &&
-		timestamp - lastFrameTime > 0 &&
-		timestamp % 500 < 16
-	) {
-		updateDebugOverlay()
+	handleInput() {
+		console.log('Input received:', {
+			gameStarted: gameState.gameStarted,
+			roundsLeft: gameState.roundsLeft,
+			gameOver: gameState.gameOver,
+		})
+		if (!gameState.gameStarted) {
+			if (gameState.roundsLeft > 0) {
+				console.log('Starting game...')
+				gameState.gameStarted = true
+				gameState.gameStartTime = performance.now()
+				playCheerSound()
+				this.startGame()
+				this.updateHUD()
+			}
+		} else if (
+			gameState.gameOver &&
+			performance.now() - gameState.knockoutTime > KNOCKOUT_DELAY
+		) {
+			if (gameState.roundsLeft > 0) {
+				console.log('Starting next round...')
+				gameState.totalScore += gameState.score
+				gameState.currentRound++
+				this.startGame()
+				gameState.gameStarted = true
+				gameState.gameOver = false
+				gameState.firstAction = false
+				gameState.gameStartTime = performance.now()
+				playCheerSound()
+			}
+		} else if (!gameState.gameOver) {
+			if (this.cheeks) {
+				console.log('Flapping cheeks...')
+				gameState.firstAction = true
+				gameState.hasEverActed = true
+				this.cheeks.velocity = CLAP_SPEED
+				gameState.squishStartTime = performance.now()
+				playFlapSound()
+			}
+		}
 	}
 
-	lastFrameTime = timestamp
+	startGame() {
+		gameState.score = 0
+		gameState.gameSpeed = 1
+		gameState.lastSpeedIncreaseScore = 0
+		gameState.firstAction = false
+		window.shareData = null
 
-	// Skip frame if tab is not visible
-	if (document.hidden) {
-		requestAnimationFrame(gameLoop)
-		return
+		if (this.cheeks) {
+			this.cheeks.visible = true // Show player when game starts
+			this.cheeks.x = this.screenWidth / 3
+			this.cheeks.y = this.screenHeight / 2
+			this.cheeks.velocity = 0
+		}
+
+		if (this.gloves) {
+			this.gloves.pairs = []
+			this.spawnGloves()
+		}
+
+		this.updateHUD()
 	}
 
-	try {
-		if (window.gameScale.isMobile) {
-			// Mobile rendering (unchanged)
-			// ... existing mobile rendering code ...
+	spawnGloves() {
+		const width = this.screenWidth
+		const height = this.screenHeight
+		const safePadding = Math.max(BASE_UNIT * 3, width * 0.08)
+		const safeHeight = height - safePadding * 2
+
+		// Increase minimum gap between arms
+		GLOVE_OPENING = Math.min(height * 0.35, BASE_UNIT * 10)
+
+		// Adjust the spawn range to prevent arms from being too close to edges
+		const minY = safePadding + GLOVE_OPENING * 0.8
+		const maxY = height - safePadding - GLOVE_OPENING * 0.8
+		let y = Math.random() * (maxY - minY) + minY
+
+		// Create glove pair container
+		const pair = new PIXI.Container()
+		pair.x = width + safePadding
+		pair.gapY = y
+		pair.passed = false
+
+		const armWidth = Math.min(width, height) / 8
+		const armHeight = armWidth * 2 // Default height if texture is missing
+		const gapHalf = GLOVE_OPENING / 2
+
+		// Create gloves
+		const armTexture = PIXI.Assets.get('arm')
+		if (armTexture) {
+			// Create sprite-based gloves
+			const topGlove = new PIXI.Sprite(armTexture)
+			topGlove.anchor.set(0.5, 0)
+			topGlove.x = 0
+			topGlove.y = -gapHalf
+			topGlove.angle = 180
+			topGlove.width = armWidth
+			topGlove.height = (armWidth / armTexture.width) * armTexture.height
+
+			const bottomGlove = new PIXI.Sprite(armTexture)
+			bottomGlove.anchor.set(0.5, 0)
+			bottomGlove.x = 0
+			bottomGlove.y = gapHalf
+			bottomGlove.width = armWidth
+			bottomGlove.height = (armWidth / armTexture.width) * armTexture.height
+
+			pair.addChild(topGlove, bottomGlove)
 		} else {
-			// Desktop rendering with WebGL optimizations
-			if (!gl || !gameCanvas || !crtEffect) {
-				console.error('Required WebGL components not available')
-				requestAnimationFrame(gameLoop)
-				return
-			}
+			// Create fallback shape-based gloves
+			const topGlove = new PIXI.Graphics()
+			topGlove.beginFill(0xff0000)
+			topGlove.drawRect(-armWidth / 2, -armHeight, armWidth, armHeight)
+			topGlove.endFill()
+			topGlove.y = -gapHalf
 
-			// Clear the WebGL canvas
-			gl.clear(gl.COLOR_BUFFER_BIT)
+			const bottomGlove = new PIXI.Graphics()
+			bottomGlove.beginFill(0xff0000)
+			bottomGlove.drawRect(-armWidth / 2, 0, armWidth, armHeight)
+			bottomGlove.endFill()
+			bottomGlove.y = gapHalf
 
-			// Create an offscreen canvas for 2D rendering
-			const offscreenCanvas = document.createElement('canvas')
-			offscreenCanvas.width = gameCanvas.width
-			offscreenCanvas.height = gameCanvas.height
+			pair.addChild(topGlove, bottomGlove)
+		}
 
-			const ctx = offscreenCanvas.getContext('2d', {
-				alpha: false,
-				desynchronized: true,
-				willReadFrequently: false,
-			})
+		this.gloves.pairs.push(pair)
+		this.gloves.addChild(pair)
+	}
 
-			if (!ctx) {
-				console.error('Could not get 2D context for offscreen canvas')
-				requestAnimationFrame(gameLoop)
-				return
-			}
+	gameLoop(delta) {
+		if (document.hidden) return
 
-			// Batch similar operations together
-			ctx.save()
-			ctx.scale(window.gameScale.dpr, window.gameScale.dpr)
+		// Update filters
+		if (this.crtFilter) {
+			this.crtFilter.time += delta * 0.5
+		}
+		if (this.rgbSplitFilter) {
+			// Subtle pulsing chromatic aberration
+			const time = performance.now() / 1000
+			const amount = Math.sin(time) * 0.5
+			this.rgbSplitFilter.red = [-2 - amount, 0]
+			this.rgbSplitFilter.blue = [2 + amount, 0]
+		}
 
-			// Draw all background elements first
-			drawBackground(ctx)
+		if (gameState.gameStarted && !gameState.gameOver) {
+			if (this.cheeks) {
+				// Calculate new velocity
+				let newVelocity =
+					this.cheeks.velocity + GRAVITY * gameState.gameSpeed * delta
+				newVelocity = Math.max(-8, Math.min(8, newVelocity))
+				this.cheeks.velocity = newVelocity
 
-			// Draw all game objects next
-			if (gameStarted && !gameOver) {
-				// Update game objects
-				if (cheeks) {
-					cheeks.velocity = Math.min(
-						Math.max(cheeks.velocity + GRAVITY * gameSpeed * timeScale, -8),
-						8
-					)
-					cheeks.y += cheeks.velocity * gameSpeed * timeScale
+				// Update position
+				this.cheeks.y += this.cheeks.velocity * gameState.gameSpeed * delta
+
+				// Handle squish effect
+				if (gameState.squishStartTime > 0) {
+					const elapsed = performance.now() - gameState.squishStartTime
+					if (elapsed < SQUISH_DURATION) {
+						const progress = elapsed / SQUISH_DURATION
+						const xScale = 1 - 0.3 * Math.sin(progress * Math.PI)
+						const yScale = 1 + (1 - xScale) * 0.5
+						const baseScale = BASE_UNIT / CHEEKS_SIZE
+						this.cheeks.scale.x = xScale * baseScale
+						this.cheeks.scale.y = yScale * baseScale
+					} else {
+						gameState.squishStartTime = 0
+						this.cheeks.scale.set(BASE_UNIT / CHEEKS_SIZE)
+					}
 				}
+			}
 
-				if (gloves && performance.now() - gameStartTime >= gameStartDelay) {
-					const speed =
-						GLOVE_SPEED *
-						gameSpeed *
-						timeScale *
-						(window.gameScale.width / 1000)
-					gloves.pairs.forEach((pair) => (pair.x -= speed))
-					gloves.pairs = gloves.pairs.filter((pair) => pair.x + GLOVE_WIDTH > 0)
-					if (
-						gloves.pairs.length === 0 ||
-						gloves.pairs[gloves.pairs.length - 1].x <
-							window.gameScale.width * GLOVE_SET_GAP
-					) {
-						gloves.spawn()
+			// Update gloves
+			if (
+				this.gloves &&
+				performance.now() - gameState.gameStartTime >= gameState.gameStartDelay
+			) {
+				const speed =
+					GLOVE_SPEED * gameState.gameSpeed * delta * (this.screenWidth / 1000)
+
+				// Move existing gloves
+				this.gloves.pairs.forEach((pair) => {
+					pair.x -= speed
+				})
+
+				// Remove off-screen gloves
+				for (let i = this.gloves.pairs.length - 1; i >= 0; i--) {
+					const pair = this.gloves.pairs[i]
+					if (pair.x + GLOVE_WIDTH <= 0) {
+						this.gloves.removeChild(pair)
+						this.gloves.pairs.splice(i, 1)
 					}
 				}
 
-				// Check collisions and bounds
-				if (checkCollisions() || checkBounds()) {
-					gameOver = true
-					knockoutTime = performance.now()
-					roundsLeft--
+				// Spawn new gloves if needed
+				if (
+					this.gloves.pairs.length === 0 ||
+					this.gloves.pairs[this.gloves.pairs.length - 1].x <
+						this.screenWidth * GLOVE_SET_GAP
+				) {
+					this.spawnGloves()
 				}
-
-				// Draw all game objects in a batch
-				if (gloves) gloves.draw(ctx)
-				if (cheeks) cheeks.draw(ctx)
 			}
 
-			// Draw all UI elements last
-			if (!gameStarted) {
-				drawTitleScreen(ctx)
-			} else if (gameOver) {
-				drawGameOverScreen(ctx)
-				if (window.onGameEnd) {
-					window.dispatchEvent(
-						new CustomEvent('gameEnd', {
-							detail: {
-								score: totalScore + score,
-								isGameOver: true,
-								roundsLeft: roundsLeft,
-							},
-						})
+			// Check for collisions and bounds
+			if (this.checkCollisions() || this.checkBounds()) {
+				gameState.gameOver = true
+				gameState.knockoutTime = performance.now()
+				gameState.roundsLeft--
+				this.updateHUD()
+			}
+		}
+	}
+
+	checkCollisions() {
+		if (!this.cheeks || !this.gloves) return false
+
+		const size = Math.min(this.screenWidth, this.screenHeight) / 15
+		const cheeksBox = {
+			x: this.cheeks.x - size,
+			y: this.cheeks.y - size,
+			width: size * 2,
+			height: size * 2,
+		}
+
+		for (const pair of this.gloves.pairs) {
+			const armWidth = Math.min(this.screenWidth, this.screenHeight) / 8
+			const armTexture = PIXI.Assets.get('images/arm.png')
+			const armHeight = armTexture
+				? (armWidth / armTexture.width) * armTexture.height
+				: armWidth * 2 // Default height if texture is missing
+			const gapHalf = GLOVE_OPENING / 2
+
+			// Collision boxes match actual glove dimensions
+			const topGlove = {
+				x: pair.x - armWidth / 2,
+				y: pair.gapY - gapHalf - armHeight,
+				width: armWidth,
+				height: armHeight,
+			}
+
+			const bottomGlove = {
+				x: pair.x - armWidth / 2,
+				y: pair.gapY + gapHalf,
+				width: armWidth,
+				height: armHeight,
+			}
+
+			if (
+				this.intersectRect(cheeksBox, topGlove) ||
+				this.intersectRect(cheeksBox, bottomGlove)
+			) {
+				playKnockoutSound()
+				window.shareData = null
+				return true
+			}
+
+			if (!pair.passed && this.cheeks.x > pair.x) {
+				pair.passed = true
+				gameState.score += window.cheatPoints || 1
+
+				if (
+					gameState.score % 1 === 0 &&
+					gameState.gameSpeed < MAX_SPEED &&
+					!window.cheatMode
+				) {
+					gameState.gameSpeed = Math.min(
+						MAX_SPEED,
+						gameState.gameSpeed + SPEED_INCREASE
 					)
+					console.log('Speed increased to:', gameState.gameSpeed)
 				}
-			} else {
-				drawHUD(ctx)
+
+				this.updateHUD()
 			}
-
-			ctx.restore()
-
-			// Apply CRT effect with optimized settings
-			crtEffect.render(offscreenCanvas, false)
 		}
 
-		// Request next frame
-		requestAnimationFrame(gameLoop)
-	} catch (error) {
-		console.error('Game loop error:', error)
-		console.error(error.stack)
-		requestAnimationFrame(gameLoop)
-	}
-}
-
-// Drawing functions
-function drawBackground(ctx) {
-	const scale = window.gameScale
-	if (!scale) return
-
-	const width = scale.width
-	const height = scale.height
-	const unit = scale.unit
-
-	// Background with mobile-friendly color
-	ctx.fillStyle = scale.isMobile ? '#444' : '#000044'
-	ctx.fillRect(0, 0, width, height)
-
-	// Grid pattern
-	ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)'
-	ctx.lineWidth = Math.max(1, unit / 20)
-
-	// Draw grid across full canvas
-	const gridSpacing = unit * 1.2
-	const verticalLines = Math.ceil(width / gridSpacing)
-	const horizontalLines = Math.ceil(height / gridSpacing)
-
-	// Draw horizontal lines
-	for (let i = 0; i <= horizontalLines; i++) {
-		const y = i * gridSpacing
-		ctx.beginPath()
-		ctx.moveTo(0, y)
-		ctx.lineTo(width, y)
-		ctx.stroke()
+		return false
 	}
 
-	// Draw vertical lines
-	for (let i = 0; i <= verticalLines; i++) {
-		const x = i * gridSpacing
-		ctx.beginPath()
-		ctx.moveTo(x, 0)
-		ctx.lineTo(x, height)
-		ctx.stroke()
-	}
-
-	// Draw crowd pattern during gameplay
-	if (gameStarted && images.crowdImage) {
-		ctx.globalAlpha = 0.6
-		const crowdHeight = unit * 8
-		const pattern = ctx.createPattern(images.crowdImage, 'repeat')
-		if (pattern) {
-			ctx.fillStyle = pattern
-			ctx.fillRect(0, 0, width, crowdHeight)
-		}
-		ctx.globalAlpha = 1.0
-	}
-
-	// Only draw ring during gameplay or game over screen
-	if (gameStarted || gameOver) {
-		drawRing(ctx)
-	}
-}
-
-// Update drawRing to extend perspective distortion
-function drawRing(ctx) {
-	const scale = window.gameScale
-	if (!scale) return
-
-	const width = scale.width
-	const height = scale.height
-	const unit = scale.unit
-
-	// Ring elements - minimal insets to extend closer to edges
-	const insetX = unit * 1.5
-	const ringTop = unit * 4
-	const ringBottom = height + unit * 2
-	const ringHeight = ringBottom - ringTop
-
-	// Ring floor with increased perspective distortion
-	ctx.fillStyle = '#00CEC4'
-	ctx.beginPath()
-	ctx.moveTo(insetX, ringTop)
-	ctx.lineTo(width - insetX, ringTop)
-	ctx.lineTo(width + unit * 8, ringBottom) // Moved further right
-	ctx.lineTo(-unit * 8, ringBottom) // Moved further left
-	ctx.fill()
-
-	// Ring posts - adjusted for minimal insets
-	const postWidth = unit * 0.8
-	const postHeight = unit * 3
-	ctx.fillStyle = '#FFFFFF'
-	ctx.fillRect(insetX * 1.5, ringTop - postHeight / 2, postWidth, postHeight)
-	ctx.fillRect(
-		width - insetX * 1.5 - postWidth,
-		ringTop - postHeight / 2,
-		postWidth,
-		postHeight
-	)
-
-	// Ring ropes - adjusted for increased perspective
-	ctx.strokeStyle = '#FF69B4'
-	ctx.lineWidth = Math.max(unit / 6, 2)
-
-	for (let i = 0; i < 3; i++) {
-		const topY = ringTop - postHeight * 0.6 + (i + 1) * (postHeight / 3)
-		const bottomY = ringBottom - i * unit
-
-		// Left side rope - extended further left
-		ctx.beginPath()
-		ctx.moveTo(insetX * 1.5 + postWidth / 2, topY)
-		ctx.lineTo(-unit * 6 + i * unit * 2, bottomY) // Progressive extension
-		ctx.stroke()
-
-		// Right side rope - extended further right
-		ctx.beginPath()
-		ctx.moveTo(width - insetX * 1.5 - postWidth / 2, topY)
-		ctx.lineTo(width + unit * 6 - i * unit * 2, bottomY) // Progressive extension
-		ctx.stroke()
-
-		// Top rope
-		ctx.beginPath()
-		ctx.moveTo(insetX * 1.5 + postWidth / 2, topY)
-		ctx.lineTo(width - insetX * 1.5 - postWidth / 2, topY)
-		ctx.stroke()
-
-		// Bottom rope - extended perspective
-		ctx.beginPath()
-		ctx.moveTo(-unit * 6 + i * unit * 2, bottomY)
-		ctx.lineTo(width + unit * 6 - i * unit * 2, bottomY)
-		ctx.stroke()
-	}
-}
-
-// Update helper function for consistent copyright text with blinking cheat mode
-function drawCopyright(ctx, color) {
-	const scale = window.gameScale
-	if (!scale) return
-
-	const width = scale.width
-	const height = scale.height
-	const unit = scale.unit
-
-	const copyrightSize = Math.min(unit * 0.5, width / 30)
-	const copyrightPadding = unit * 3
-	ctx.font = `${copyrightSize}px "Press Start 2P"`
-
-	if (window.cheatMode) {
-		// Blinking red text for cheat mode
-		ctx.fillStyle =
-			Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
-	} else {
-		ctx.fillStyle = color
-	}
-
-	ctx.textAlign = 'center'
-	ctx.textBaseline = 'middle'
-	ctx.fillText(
-		window.cheatMode ? 'CHEAT MODE ACTIVATED' : 'NOT © 2024 FWD:FWD:FWD:',
-		width / 2,
-		height - copyrightPadding
-	)
-}
-
-// Update drawTitleScreen to use helper
-function drawTitleScreen(ctx) {
-	const scale = window.gameScale
-	if (!scale) return
-
-	const width = scale.width
-	const height = scale.height
-	const unit = scale.unit
-
-	// Draw background first
-	drawBackground(ctx)
-
-	// Center all text
-	ctx.textAlign = 'center'
-	ctx.textBaseline = 'middle'
-
-	// Calculate text sizes with further reductions
-	const titleSize = Math.min(unit * 1.6, width / 14)
-	const subtitleSize = Math.min(unit * 1.1, width / 20)
-	const instructionSize = Math.min(unit * 0.6, width / 28)
-	const menuSize = Math.min(unit * 0.9, width / 20)
-
-	// Move text further from edges
-	const insetY = unit * 4
-
-	// Title - shifted up
-	ctx.font = `${titleSize}px "Press Start 2P"`
-	ctx.fillStyle = '#FFA500'
-	ctx.fillText('CLAPPY', width / 2, height * 0.25)
-	ctx.fillText('CHEEKS!!', width / 2, height * 0.35)
-
-	// Instructions - shifted up and tightened
-	ctx.font = `${instructionSize}px "Press Start 2P"`
-	ctx.fillStyle = '#FFFFFF'
-	ctx.fillText('3 ROUNDS PER MATCH', width / 2, height * 0.48)
-	ctx.fillText('DODGE PUNCHES FOR POINTS', width / 2, height * 0.54)
-
-	// Press Space - shifted up
-	if (roundsLeft > 0) {
-		ctx.font = `${menuSize}px "Press Start 2P"`
-		ctx.fillStyle =
-			Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
-		ctx.fillText('PRESS SPACE', width / 2, height * 0.65)
-
-		// Draw decorative gloves - adjusted for new text position
-		if (images.armImage) {
-			const gloveSize = menuSize * 2.5
-			const textWidth = ctx.measureText('PRESS SPACE').width
-			const gloveSpacing = textWidth * 2.4
-			const gloveY = height * 0.65
-			const moveAmount =
-				Math.floor(performance.now() / 250) % 2 ? unit * 0.4 : 0
-
-			// Calculate dimensions for proper centering
-			const gloveWidth = gloveSize
-			const gloveHeight =
-				(gloveSize / images.armImage.width) * images.armImage.height
-
-			// Left glove
-			ctx.save()
-			ctx.translate(width / 2 - gloveSpacing / 2 - moveAmount, gloveY)
-			ctx.rotate(Math.PI / 2)
-			ctx.scale(-1, 1)
-			ctx.drawImage(
-				images.armImage,
-				-gloveWidth / 2,
-				-gloveHeight / 2,
-				gloveWidth,
-				gloveHeight
-			)
-			ctx.restore()
-
-			// Right glove
-			ctx.save()
-			ctx.translate(width / 2 + gloveSpacing / 2 + moveAmount, gloveY)
-			ctx.rotate(-Math.PI / 2)
-			ctx.drawImage(
-				images.armImage,
-				-gloveWidth / 2,
-				-gloveHeight / 2,
-				gloveWidth,
-				gloveHeight
-			)
-			ctx.restore()
-		}
-	} else {
-		ctx.font = `${menuSize}px "Press Start 2P"`
-		ctx.fillStyle = '#FFFFFF'
-		ctx.fillText('GAME OVER', width / 2, height * 0.65)
-	}
-
-	// Score - shifted up
-	if (totalScore > 0) {
-		ctx.font = `${instructionSize}px "Press Start 2P"`
-		ctx.fillStyle = '#FFFFFF'
-		ctx.fillText(`TOTAL SCORE: ${totalScore}`, width / 2, height * 0.75)
-	}
-
-	// Use helper for copyright with title screen color
-	drawCopyright(ctx, window.cheatMode ? '#FF0000' : '#8888FF')
-}
-
-// Update drawGameOverScreen to use helper
-function drawGameOverScreen(ctx) {
-	const scale = window.gameScale
-	if (!scale) return
-
-	const width = scale.width
-	const height = scale.height
-	const unit = scale.unit
-
-	// Use increased insets
-	const insetX = unit * 5
-	const insetY = unit * 4
-
-	// Draw background first
-	drawBackground(ctx)
-
-	// Center all text
-	ctx.textAlign = 'center'
-	ctx.textBaseline = 'middle'
-
-	// Calculate text sizes with further reductions
-	const titleSize = Math.min(unit * 1.6, width / 14)
-	const scoreSize = Math.min(unit * 0.9, width / 20)
-	const textSize = Math.min(unit * 0.9, width / 20)
-
-	// Adjust positions to account for insets
-	const effectiveWidth = width - insetX * 2
-	const centerX = width / 2
-
-	if (roundsLeft === 0) {
-		// Final game over screen - centered vertically
-		const knockoutY = height * 0.45 // Center point for knockout group
-
-		// Draw KNOCKOUT!!
-		ctx.font = `${titleSize}px "Press Start 2P"`
-		ctx.fillStyle = '#00005C'
-		ctx.fillText('KNOCKOUT!!', centerX, knockoutY)
-
-		// Final score with white container - closer to KNOCKOUT
-		ctx.font = `${scoreSize}px "Press Start 2P"`
-		const scoreText = `FINAL SCORE: ${totalScore + score}`
-		const scoreWidth = ctx.measureText(scoreText).width + unit * 2
-		const scoreHeight = unit * 2
-		const scoreY = knockoutY + titleSize * 1.5
-
-		// Draw white container
-		ctx.fillStyle = '#FFFFFF'
-		ctx.fillRect(
-			centerX - scoreWidth / 2,
-			scoreY - scoreHeight / 2,
-			scoreWidth,
-			scoreHeight
+	intersectRect(r1, r2) {
+		return !(
+			r2.x > r1.x + r1.width ||
+			r2.x + r2.width < r1.x ||
+			r2.y > r1.y + r1.height ||
+			r2.y + r2.height < r1.y
 		)
-
-		// Draw score text
-		ctx.fillStyle = '#000000'
-		ctx.fillText(scoreText, centerX, scoreY)
-
-		// Use helper for copyright with dark ring color
-		drawCopyright(ctx, '#004643')
-	} else {
-		// Round over screen - centered group with consistent spacing
-		const groupCenterY = height * 0.55 // Center point for entire group
-		const titleSpacing = titleSize * 0.65 // Increased space after ROUND OVER
-		const textSpacing = titleSize * 0.8 // Consistent spacing for score texts
-
-		// Calculate total group height
-		const totalHeight =
-			titleSize * 2 + titleSpacing + textSpacing * 3 + textSize
-
-		// Start position to center the group
-		const startY = groupCenterY - totalHeight / 2
-
-		// Draw ROUND OVER!!
-		ctx.font = `${titleSize}px "Press Start 2P"`
-		ctx.fillStyle = '#00005C'
-		ctx.fillText('ROUND', centerX, startY)
-		ctx.fillText('OVER!!', centerX, startY + titleSize * 1.2)
-
-		// Draw scores with consistent spacing
-		ctx.font = `${scoreSize}px "Press Start 2P"`
-		ctx.fillStyle = '#004643'
-		const scoresY = startY + titleSize * 2 + titleSpacing
-		ctx.fillText(`ROUND SCORE: ${score}`, centerX, scoresY)
-		ctx.fillText(
-			`TOTAL SCORE: ${totalScore + score}`,
-			centerX,
-			scoresY + textSpacing
-		)
-		ctx.fillText(
-			`ROUNDS LEFT: ${roundsLeft}`,
-			centerX,
-			scoresY + textSpacing * 2
-		)
-
-		// Press space (after delay)
-		if (performance.now() - knockoutTime > KNOCKOUT_DELAY) {
-			ctx.font = `${textSize}px "Press Start 2P"`
-			ctx.fillStyle =
-				Math.floor(performance.now() / 250) % 2 ? '#FF0000' : '#FFFFFF'
-			ctx.fillText('PRESS SPACE', centerX, scoresY + textSpacing * 3)
-		}
-
-		// Use helper for copyright with dark ring color
-		drawCopyright(ctx, '#004643')
-	}
-}
-
-// Update drawHUD to include copyright during gameplay
-function drawHUD(ctx) {
-	if (!window.gameScale) return
-
-	const scale = window.gameScale
-	const unit = scale.unit * 0.7 // Reduced to match smallest text size
-	const width = scale.width
-	const height = scale.height
-
-	ctx.save()
-	ctx.textAlign = 'center'
-	ctx.textBaseline = 'middle'
-	ctx.font = `${unit}px 'Press Start 2P'`
-
-	// Move HUD up by increasing top inset
-	const insetX = unit * 5
-	const insetY = unit * 3
-	const hudHeight = unit * 1.5
-
-	// Prepare text
-	const pointsText = `POINTS: ${score}`
-	const roundsText = `ROUND ${currentRound}`
-
-	// Calculate text widths
-	const pointsTextWidth = ctx.measureText(pointsText).width
-	const roundsTextWidth = ctx.measureText(roundsText).width
-
-	// Add padding
-	const padding = unit * 0.75
-	const pointsWidth = pointsTextWidth + padding * 2
-	const roundsWidth = roundsTextWidth + padding * 2
-
-	// Calculate center position first
-	const centerX = width / 2
-	const totalWidth = pointsWidth + roundsWidth
-
-	// Position containers relative to center
-	const pointsX = centerX - totalWidth / 2
-	const roundsX = centerX - totalWidth / 2 + pointsWidth
-
-	// Draw points container and text
-	ctx.fillStyle = '#98FF98'
-	ctx.fillRect(pointsX, insetY, pointsWidth, hudHeight)
-	ctx.fillStyle = '#000000'
-	ctx.fillText(pointsText, pointsX + pointsWidth / 2, insetY + hudHeight / 2)
-
-	// Draw rounds container and text
-	ctx.fillStyle = '#000000'
-	ctx.fillRect(roundsX, insetY, roundsWidth, hudHeight)
-	ctx.fillStyle = '#FFFFFF'
-	ctx.fillText(roundsText, roundsX + roundsWidth / 2, insetY + hudHeight / 2)
-
-	ctx.restore()
-
-	// Only draw copyright/cheat mode text during gameplay if cheat mode is active
-	if (window.cheatMode) {
-		drawCopyright(ctx, '#004643') // Using the same color as round over screen
-	}
-}
-
-// Collision detection
-function checkCollisions() {
-	if (!cheeks || !gloves || !window.gameScale) return false
-	const scale = window.gameScale
-
-	const size = Math.min(scale.width, scale.height) / 15
-	const cheeksBox = {
-		x: cheeks.x - size,
-		y: cheeks.y - size,
-		width: size * 2,
-		height: size * 2,
 	}
 
-	for (const pair of gloves.pairs) {
-		const armWidth = Math.min(scale.width, scale.height) / 8
-		const armHeight =
-			(armWidth / images.armImage.width) * images.armImage.height
-		const gapHalf = GLOVE_OPENING / 2
-
-		// Collision boxes match actual glove dimensions
-		const topGlove = {
-			x: pair.x - armWidth / 2,
-			y: pair.gapY - gapHalf - armHeight,
-			width: armWidth,
-			height: armHeight,
-		}
-
-		const bottomGlove = {
-			x: pair.x - armWidth / 2,
-			y: pair.gapY + gapHalf,
-			width: armWidth,
-			height: armHeight,
-		}
-
-		if (
-			intersectRect(cheeksBox, topGlove) ||
-			intersectRect(cheeksBox, bottomGlove)
-		) {
+	checkBounds() {
+		if (!this.cheeks) return false
+		const outOfBounds = this.cheeks.y < 0 || this.cheeks.y > this.screenHeight
+		if (outOfBounds) {
 			playKnockoutSound()
 			window.shareData = null
-			return true
+		}
+		return outOfBounds
+	}
+
+	activateCheatMode() {
+		console.log('Activating cheat mode...')
+		window.cheatMode = true
+		window.gameSpeed = 0.5
+		window.cheatPoints = 10
+
+		// Play Konami sound using loaded asset
+		if (audio.context) {
+			PIXI.Assets.get('konami')
+				.arrayBuffer()
+				.then((arrayBuffer) => audio.context.decodeAudioData(arrayBuffer))
+				.then((audioBuffer) => {
+					playSound(audioBuffer, { volume: 0.3 })
+				})
+				.catch((e) => console.warn('Konami sound failed:', e))
 		}
 
-		if (!pair.passed && cheeks.x > pair.x) {
-			pair.passed = true
-			score += window.cheatPoints || 1
+		console.log('Game state updated:', {
+			cheatMode: window.cheatMode,
+			gameSpeed: window.gameSpeed,
+			cheatPoints: window.cheatPoints,
+		})
 
-			if (score % 1 === 0 && gameSpeed < MAX_SPEED && !window.cheatMode) {
-				gameSpeed = Math.min(MAX_SPEED, gameSpeed + SPEED_INCREASE)
-				console.log('Speed increased to:', gameSpeed)
+		// Flash power LED red rapidly for cheat activation
+		let flashCount = 0
+		const flashInterval = setInterval(() => {
+			if (flashCount >= 6) {
+				clearInterval(flashInterval)
+				return
+			}
+			if (window.flashPowerLED) {
+				window.flashPowerLED('#ff3333', 50)
+			}
+			flashCount++
+		}, 100)
+
+		// Update HUD to show cheat mode
+		this.updateHUD()
+	}
+
+	drawCopyright() {
+		const width = this.app.screen.width
+		const height = this.app.screen.height
+		const baseFontSize = Math.min(height / 32, width / 38) // Reduced size
+
+		const copyrightText = window.cheatMode
+			? 'CHEAT MODE ACTIVATED'
+			: 'NOT © 2024 FWD:FWD:FWD:'
+
+		const copyright = new PIXI.Text(copyrightText, {
+			fontFamily: 'Press Start 2P',
+			fontSize: baseFontSize,
+			fill: window.cheatMode ? 0xff0000 : 0x8888ff,
+			align: 'center',
+		})
+		copyright.anchor.set(0.5)
+
+		// Create container for copyright
+		const copyrightContainer = new PIXI.Container()
+		copyrightContainer.addChild(copyright)
+
+		// Position at bottom of screen
+		copyrightContainer.x = width / 2
+		copyrightContainer.y = height - baseFontSize * 3
+
+		// Scale if needed
+		const bounds = copyrightContainer.getBounds()
+		const maxWidth = width * 0.9
+		const scale = Math.min(maxWidth / bounds.width, 1)
+		if (scale < 1) {
+			copyrightContainer.scale.set(scale)
+		}
+
+		if (window.cheatMode) {
+			// Blinking effect for cheat mode
+			this.app.ticker.add(() => {
+				copyright.visible = Math.floor(performance.now() / 250) % 2
+			})
+		}
+
+		this.hud.addChild(copyrightContainer)
+	}
+
+	createBackground() {
+		// Clear existing background
+		this.background.removeChildren()
+
+		// Create grid pattern
+		const gridGraphics = new PIXI.Graphics()
+		this.updateGrid(gridGraphics)
+		this.background.addChild(gridGraphics)
+
+		// Only create ring during actual gameplay
+		if (gameState.gameStarted && !gameState.gameOver) {
+			this.ring = new PIXI.Container()
+			this.updateRing()
+			this.background.addChild(this.ring)
+		}
+	}
+
+	showErrorScreen(message) {
+		// Clear existing HUD
+		this.hud.removeChildren()
+
+		const width = this.screenWidth
+		const height = this.screenHeight
+		const fontSize = Math.min(BASE_UNIT * 0.8, width / 20)
+
+		const errorText = new PIXI.Text(message, {
+			fontFamily: 'Press Start 2P',
+			fontSize: fontSize,
+			fill: 0xff0000,
+			align: 'center',
+			wordWrap: true,
+			wordWrapWidth: width * 0.8,
+		})
+		errorText.anchor.set(0.5)
+		errorText.x = width / 2
+		errorText.y = height / 2
+
+		this.hud.addChild(errorText)
+	}
+
+	async initializeAudio(audioAssets) {
+		try {
+			// Initialize Web Audio context
+			const audioContext = new (window.AudioContext ||
+				window.webkitAudioContext)()
+
+			// Resume audio context if it's suspended (needed for some browsers)
+			if (audioContext.state === 'suspended') {
+				await audioContext.resume()
+			}
+
+			// Store the raw assets and context
+			audio.clapAssets = Array.from(
+				{ length: 9 },
+				(_, i) => audioAssets[`clap${i + 1}`]
+			).filter((asset) => asset)
+			audio.cheerAsset = audioAssets.cheer
+			audio.booAsset = audioAssets.boo
+			audio.context = audioContext
+			audio.initialized = true
+
+			console.log('Audio initialized:', {
+				claps: audio.clapAssets.length,
+				cheer: !!audio.cheerAsset,
+				boo: !!audio.booAsset,
+				contextState: audio.context.state,
+			})
+		} catch (error) {
+			console.warn('Failed to initialize audio:', error)
+			audio.initialized = true
+		}
+	}
+}
+
+// Audio playback functions
+function playSound(buffer, options = {}) {
+	if (!audio.initialized || !audio.context || !buffer) return null
+
+	try {
+		// Resume context if suspended
+		if (audio.context.state === 'suspended') {
+			audio.context.resume()
+		}
+
+		const source = audio.context.createBufferSource()
+		const gainNode = audio.context.createGain()
+
+		source.buffer = buffer
+		source.loop = options.loop || false
+		gainNode.gain.value = options.volume || 1.0
+
+		source.connect(gainNode)
+		gainNode.connect(audio.context.destination)
+
+		source.start()
+
+		return {
+			source,
+			gainNode,
+			stop: () => {
+				try {
+					source.stop()
+					source.disconnect()
+					gainNode.disconnect()
+				} catch (e) {
+					console.warn('Error stopping sound:', e)
+				}
+			},
+		}
+	} catch (e) {
+		console.warn('Error playing sound:', e)
+		return null
+	}
+}
+
+let cheerSound = null
+
+function stopCheerSound() {
+	if (cheerSound) {
+		try {
+			cheerSound.stop()
+			cheerSound = null
+		} catch (e) {
+			console.warn('Stop cheer sound error:', e)
+		}
+	}
+}
+
+async function playFlapSound() {
+	if (!audio.initialized || !audio.context) return
+
+	try {
+		// Resume context if suspended
+		if (audio.context.state === 'suspended') {
+			await audio.context.resume()
+		}
+
+		// Use actual clap sounds if available
+		if (audio.clapAssets && audio.clapAssets.length > 0) {
+			const asset = audio.clapAssets[currentClapSound]
+			if (asset) {
+				const arrayBuffer = await asset.arrayBuffer()
+				const buffer = await audio.context.decodeAudioData(arrayBuffer)
+				playSound(buffer, { volume: 0.3 })
+				// Cycle through available clap sounds
+				currentClapSound = (currentClapSound + 1) % audio.clapAssets.length
+				return
 			}
 		}
-	}
 
-	return false
+		// Fallback to oscillator if no audio files
+		if (!audio.context) return
+
+		const oscillator = audio.context.createOscillator()
+		const gainNode = audio.context.createGain()
+
+		oscillator.connect(gainNode)
+		oscillator.connect(audio.context.destination)
+
+		oscillator.type = 'sine'
+		oscillator.frequency.setValueAtTime(440, audio.context.currentTime)
+
+		gainNode.gain.setValueAtTime(0, audio.context.currentTime)
+		gainNode.gain.linearRampToValueAtTime(0.3, audio.context.currentTime + 0.01)
+		gainNode.gain.linearRampToValueAtTime(0, audio.context.currentTime + 0.1)
+
+		oscillator.start()
+		oscillator.stop(audio.context.currentTime + 0.1)
+
+		oscillator.onended = () => {
+			oscillator.disconnect()
+			gainNode.disconnect()
+		}
+	} catch (e) {
+		console.warn('Sound play error:', e)
+	}
 }
 
-// Helper function for collision detection
-function intersectRect(r1, r2) {
-	return !(
-		r2.x > r1.x + r1.width ||
-		r2.x + r2.width < r1.x ||
-		r2.y > r1.y + r1.height ||
-		r2.y + r2.height < r1.y
-	)
+async function playCheerSound() {
+	if (!audio.initialized || !audio.cheerAsset) return
+
+	try {
+		// Resume context if suspended
+		if (audio.context.state === 'suspended') {
+			await audio.context.resume()
+		}
+
+		stopCheerSound()
+		const arrayBuffer = await audio.cheerAsset.arrayBuffer()
+		const buffer = await audio.context.decodeAudioData(arrayBuffer)
+		cheerSound = playSound(buffer, { loop: true, volume: 0.1 })
+	} catch (e) {
+		console.warn('Cheer sound error:', e)
+	}
 }
 
-// Update bounds checking
-function checkBounds() {
-	if (!cheeks || !window.gameScale) return false
-	const outOfBounds = cheeks.y < 0 || cheeks.y > window.gameScale.height
-	if (outOfBounds) {
-		playKnockoutSound()
-		window.shareData = null
+async function playKnockoutSound() {
+	if (!audio.initialized) return
+
+	try {
+		// Resume context if suspended
+		if (audio.context.state === 'suspended') {
+			await audio.context.resume()
+		}
+
+		stopCheerSound()
+
+		// Use boo sound if available
+		if (audio.booAsset) {
+			const arrayBuffer = await audio.booAsset.arrayBuffer()
+			const buffer = await audio.context.decodeAudioData(arrayBuffer)
+			playSound(buffer, { volume: 0.3 })
+			return
+		}
+
+		// Fallback to oscillator if no audio file
+		if (!audio.context) return
+
+		const oscillator = audio.context.createOscillator()
+		const gainNode = audio.context.createGain()
+
+		oscillator.connect(gainNode)
+		oscillator.connect(audio.context.destination)
+
+		oscillator.type = 'square'
+		oscillator.frequency.setValueAtTime(220, audio.context.currentTime)
+
+		gainNode.gain.setValueAtTime(0, audio.context.currentTime)
+		gainNode.gain.linearRampToValueAtTime(0.3, audio.context.currentTime + 0.01)
+		gainNode.gain.linearRampToValueAtTime(0, audio.context.currentTime + 0.3)
+
+		oscillator.start()
+		oscillator.stop(audio.context.currentTime + 0.3)
+
+		oscillator.onended = () => {
+			oscillator.disconnect()
+			gainNode.disconnect()
+		}
+	} catch (e) {
+		console.warn('Knockout sound error:', e)
 	}
-	return outOfBounds
 }
 
 // Wait for DOM to be ready
-document.addEventListener('DOMContentLoaded', async () => {
-	console.log('DOM loaded, initializing game...')
-	try {
-		// Wait for power-on sequence to complete if it exists
-		if (window.powerOnComplete) {
-			await window.powerOnComplete
-		}
+document.addEventListener('DOMContentLoaded', () => {
+	console.log('DOM loaded, waiting for power-on...')
 
-		const initialized = await init()
-		if (initialized) {
-			console.log('Game initialized, starting game loop...')
-			requestAnimationFrame(gameLoop)
-		} else {
-			console.error('Game initialization failed')
+	// Initialize game after power-on sequence
+	const initGame = async () => {
+		try {
+			console.log('Creating game instance...')
+			window.game = new Game()
+		} catch (error) {
+			console.error('Failed to create game:', error)
 		}
-	} catch (error) {
-		console.error('Failed to initialize game:', error)
 	}
-})
 
-// Separate function to activate cheat mode
-function activateCheatMode() {
-	console.log('Activating cheat mode...')
-	cheatMode = true
-	window.cheatMode = true // Make it accessible to game.js
-	konamiIndex = 0
-	window.gameSpeed = 0.5
-	window.cheatPoints = 10
+	// Wait for power-on if needed, otherwise start immediately
+	if (window.powerOnComplete) {
+		window.powerOnComplete.then(initGame).catch((error) => {
+			console.error('Power-on sequence failed:', error)
+			// Start game anyway
+			initGame()
+		})
+	} else {
+		initGame()
+	}
 
-	// Play Konami sound effect
-	const konamiSound = new Audio('audio/konami.mp3')
-	konamiSound.play().catch((e) => console.log('Konami sound failed:', e))
+	// Initialize Konami code
+	let konamiIndex = 0
+	const konamiCode = [
+		'ArrowUp',
+		'ArrowUp',
+		'ArrowDown',
+		'ArrowDown',
+		'ArrowLeft',
+		'ArrowRight',
+		'ArrowLeft',
+		'ArrowRight',
+		'b',
+		'a',
+	]
 
-	console.log('Game state updated:', {
-		cheatMode: window.cheatMode,
-		gameSpeed: window.gameSpeed,
-		cheatPoints: window.cheatPoints,
-	})
-
-	// Flash power LED red rapidly for cheat activation
-	let flashCount = 0
-	const flashInterval = setInterval(() => {
-		if (flashCount >= 6) {
-			clearInterval(flashInterval)
-			return
+	window.addEventListener('keydown', (e) => {
+		if (e.key === konamiCode[konamiIndex]) {
+			konamiIndex++
+			if (konamiIndex === konamiCode.length) {
+				if (!window.cheatMode && window.game) {
+					window.game.activateCheatMode()
+				}
+				konamiIndex = 0
+			}
+		} else {
+			konamiIndex = 0
 		}
-		flashPowerLED('#ff3333', 50)
-		flashCount++
-	}, 100)
-}
+	})
+})

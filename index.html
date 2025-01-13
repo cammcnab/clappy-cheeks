@@ -126,7 +126,7 @@
 				overflow: hidden;
 				border-radius: calc(var(--bezel-radius) * 4);
 				background: #000000;
-				touch-action: none;
+				touch-action: manipulation;
 				-webkit-touch-callout: none;
 				-webkit-user-select: none;
 				user-select: none;
@@ -144,27 +144,33 @@
 				align-items: center;
 				overflow: hidden;
 				background: #000000;
-				touch-action: none;
+				touch-action: manipulation;
 				-webkit-touch-callout: none;
 				-webkit-user-select: none;
 				user-select: none;
+				will-change: filter;
+				transform: translateZ(0);
+				backface-visibility: hidden;
 			}
 
 			/* Game canvas */
 			#gameCanvas {
 				position: absolute;
-				width: 120%;
-				height: 120%;
-				left: -10%;
-				top: -10%;
-				background: #000;
-				image-rendering: pixelated;
-				touch-action: none;
+				touch-action: manipulation;
 				-webkit-touch-callout: none;
 				-webkit-user-select: none;
 				user-select: none;
+				left: 0;
+				width: 100%;
+				height: 100%;
+				top: 0;
+				right: 0;
+				bottom: 0;
+				background: #000;
 				z-index: 1;
-				transform-origin: center center;
+				will-change: transform;
+				transform: translateZ(0);
+				backface-visibility: hidden;
 			}
 
 			/* Control panel area */
@@ -1091,35 +1097,6 @@
 					transform: translateZ(0);
 				}
 			}
-
-			/* Prevent iOS overscroll */
-			html,
-			body {
-				position: fixed;
-				overflow: hidden;
-				width: 100%;
-				height: 100%;
-				touch-action: none;
-				-webkit-overflow-scrolling: none;
-				overscroll-behavior: none;
-				background: #000;
-			}
-
-			/* Adjust HUD positioning to account for distortion */
-			.hud {
-				position: absolute;
-				width: 80%;
-				left: 10%;
-				top: 5%;
-				z-index: 2;
-			}
-
-			/* Adjust ring positioning */
-			.ring {
-				position: relative;
-				width: 90%;
-				margin: 0 auto;
-			}
 		</style>
 	</head>
 	<body>
@@ -1291,7 +1268,18 @@
 		</script>
 
 		<!-- Game scripts -->
-		<script type="module" src="shaders.js"></script>
+		<script src="https://pixijs.download/v7.4.0/pixi.min.js"></script>
+		<script src="https://filters.pixijs.download/v5.1.1/pixi-filters.js"></script>
+		<script>
+			// Wait for scripts to load before initializing game
+			window.addEventListener('load', () => {
+				if (PIXI.filters && PIXI.filters.CRTFilter) {
+					console.log('PixiJS and filters loaded successfully')
+				} else {
+					console.error('Failed to load PixiJS filters')
+				}
+			})
+		</script>
 		<script type="module" src="game.js"></script>
 
 		<!-- Add sharing functionality -->
