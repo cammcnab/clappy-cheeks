@@ -1679,7 +1679,16 @@ document.addEventListener('DOMContentLoaded', () => {
 	const initGame = async () => {
 		try {
 			console.log('Creating game instance...')
-			window.game = new Game()
+			const gameInstance = new Game()
+			window.game = gameInstance // Explicitly set window.game
+
+			// Expose handleInput method globally
+			window.game.handleInput = gameInstance.handleInput.bind(gameInstance)
+
+			console.log('Game instance created and methods exposed:', {
+				gameExists: !!window.game,
+				handleInputExists: !!window.game.handleInput,
+			})
 		} catch (error) {
 			console.error('Failed to create game:', error)
 		}

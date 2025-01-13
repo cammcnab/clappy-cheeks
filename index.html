@@ -4,7 +4,7 @@
 		<meta charset="UTF-8" />
 		<meta
 			name="viewport"
-			content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+			content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover"
 		/>
 		<meta name="robots" content="noindex, nofollow" />
 		<meta name="googlebot" content="noindex, nofollow" />
@@ -22,6 +22,80 @@
 			rel="stylesheet"
 		/>
 		<style>
+			/* Base touch handling for all elements */
+			*,
+			*::before,
+			*::after {
+				touch-action: manipulation;
+				-webkit-touch-callout: none;
+				-webkit-user-select: none;
+				user-select: none;
+				-webkit-tap-highlight-color: transparent;
+				box-sizing: border-box;
+				margin: 0;
+				padding: 0;
+			}
+
+			/* Common properties for fixed positioning */
+			html,
+			body {
+				height: 100%;
+				width: 100%;
+				overflow: hidden;
+				position: fixed;
+			}
+
+			/* Common properties for game containers */
+			.canvas-container,
+			.game-wrapper,
+			#gameCanvas {
+				position: absolute;
+				width: 100%;
+				height: 100%;
+				left: 0;
+				top: 0;
+				background: #000;
+				will-change: transform;
+				transform: translateZ(0);
+				backface-visibility: hidden;
+			}
+
+			/* Common properties for buttons */
+			.dpad-button,
+			.action-button,
+			.control-button {
+				cursor: pointer;
+				position: relative;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+			}
+
+			/* Common properties for power groups */
+			.power-group-desktop,
+			.power-group-mobile {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+			}
+
+			/* Common properties for speaker grilles */
+			.speaker-grille,
+			.speaker-grille-right {
+				background-image: var(--noise-texture),
+					repeating-linear-gradient(
+						90deg,
+						#222,
+						#222 2px,
+						#1a1a1a 2px,
+						#1a1a1a 4px
+					);
+				border-radius: 6px;
+				border: 1px solid #333;
+				box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3),
+					0 1px 1px rgba(255, 255, 255, 0.05);
+			}
+
 			/* Base TV sizing variables */
 			:root {
 				--tv-padding: 20px;
@@ -45,27 +119,26 @@
 				}
 			}
 
-			* {
-				box-sizing: border-box;
-				margin: 0;
-				padding: 0;
-			}
-
-			html,
-			body {
-				width: 100%;
+			html {
+				touch-action: manipulation;
 				height: 100%;
 				overflow: hidden;
+				position: fixed;
+				width: 100%;
 			}
 
 			body {
+				touch-action: manipulation;
+				height: 100%;
+				overflow: hidden;
+				position: fixed;
+				width: 100%;
 				display: flex;
 				justify-content: center;
 				align-items: center;
 				background-color: #000;
 				font-family: 'Press Start 2P', cursive;
 				-webkit-tap-highlight-color: transparent;
-				touch-action: manipulation;
 			}
 
 			.tv-container {
@@ -1307,10 +1380,21 @@
 			]
 			let konamiIndex = 0
 			let cheatMode = false
+			let waitingForAB = false // New flag to track if we're waiting for A/B input
 
 			// Function to handle Konami code input
 			function handleKonamiInput(key) {
 				console.log('Key pressed:', key, 'Expected:', konamiCode[konamiIndex])
+
+				// Check if we're in the D-pad sequence (first 8 inputs)
+				const inDpadSequence = konamiIndex < 8
+
+				// If we're waiting for A/B but get a D-pad input, reset
+				if (waitingForAB && key.startsWith('Arrow')) {
+					console.log('Got D-pad input while waiting for A/B, resetting')
+					resetKonamiState()
+					return
+				}
 
 				if (key === konamiCode[konamiIndex]) {
 					console.log(
@@ -1319,20 +1403,31 @@
 						'/',
 						konamiCode.length
 					)
-					// Flash blue for correct input
 					flashPowerLED('#3333ff')
 					konamiIndex++
+
+					// Check if we've completed the D-pad sequence
+					if (konamiIndex === 8) {
+						console.log('D-pad sequence complete! Waiting for A/B...')
+						waitingForAB = true
+					}
 
 					if (konamiIndex === konamiCode.length) {
 						console.log('Konami code completed! Activating cheat mode...')
 						activateCheatMode()
+						resetKonamiState()
 					}
 				} else {
 					console.log('Wrong key, resetting sequence')
-					// Flash red for incorrect input
 					flashPowerLED('#ff3333')
-					konamiIndex = 0
+					resetKonamiState()
 				}
+			}
+
+			// Function to reset Konami state
+			function resetKonamiState() {
+				konamiIndex = 0
+				waitingForAB = false
 			}
 
 			// Add Konami code listener - works on any screen
@@ -1390,43 +1485,69 @@
 				dpadButtons.forEach((button) => {
 					const direction = button.dataset.direction
 
-					// Handle both Konami code and jump
-					const handlePress = (e) => {
+					// Create a persistent handler function
+					button.pressHandler = (e) => {
 						e.preventDefault()
+						e.stopPropagation()
 						handleKonamiInput(
 							'Arrow' + direction.charAt(0).toUpperCase() + direction.slice(1)
 						)
-						handleInput() // Also trigger jump
 					}
 
-					button.addEventListener('touchstart', handlePress)
-					button.addEventListener('mousedown', handlePress)
+					// Remove any existing listeners using the stored handler
+					button.removeEventListener('pointerdown', button.pressHandler)
+					button.removeEventListener('touchstart', button.pressHandler)
+					button.removeEventListener('mousedown', button.pressHandler)
+
+					// Add single event listener that handles both touch and mouse
+					button.addEventListener('pointerdown', button.pressHandler)
 				})
 
 				// Map touch events for action buttons
 				actionButtons.forEach((button) => {
 					const action = button.dataset.action
 
-					// Handle both Konami code and jump
+					// Create handler that checks Konami state before triggering game input
 					const handlePress = (e) => {
 						e.preventDefault()
+						e.stopPropagation()
 
-						// Handle Konami code
-						handleKonamiInput(action.toLowerCase())
+						// Check if this button press is the next expected Konami code input
+						const isNextKonamiInput =
+							konamiCode[konamiIndex].toLowerCase() === action.toLowerCase()
 
-						// Trigger game input for A or B button press
-						if (window.game && (action === 'A' || action === 'B')) {
+						// If we're in the A/B sequence (after D-pad) and this is the next input
+						if (waitingForAB && isNextKonamiInput) {
+							handleKonamiInput(action.toLowerCase())
+							// Skip game input during Konami sequence
+							return
+						}
+
+						// Only allow game input if we're completely done with Konami sequence
+						if (
+							!waitingForAB &&
+							konamiIndex === 0 &&
+							!cheatMode &&
+							window.game &&
+							window.game.handleInput
+						) {
 							window.game.handleInput()
 						}
 					}
 
 					// Remove any existing listeners
+					button.removeEventListener('pointerdown', handlePress)
 					button.removeEventListener('touchstart', handlePress)
 					button.removeEventListener('mousedown', handlePress)
 
-					// Add new listeners
+					// Add listeners for both touch and click
+					button.addEventListener('pointerdown', handlePress, {
+						passive: false,
+					})
 					button.addEventListener('touchstart', handlePress, { passive: false })
 					button.addEventListener('mousedown', handlePress)
+
+					console.log('Handler attached to button:', action)
 				})
 
 				const b = document.getElementById('shareButton')
@@ -1473,27 +1594,10 @@
 			// Separate function to activate cheat mode
 			function activateCheatMode() {
 				console.log('Activating cheat mode...')
-				cheatMode = true
-				window.cheatMode = true // Make it accessible to game.js
-				konamiIndex = 0
-				window.gameSpeed = 0.5
-				window.cheatPoints = 10
 
-				// Play Konami sound effect
+				// Play Konami sound effect first
 				const konamiSound = new Audio('audio/konami.mp3')
 				konamiSound.play().catch((e) => console.log('Konami sound failed:', e))
-
-				console.log('Game state updated:', {
-					cheatMode: window.cheatMode,
-					gameSpeed: window.gameSpeed,
-					cheatPoints: window.cheatPoints,
-				})
-
-				// Create or update cheat mode indicator
-				let cheatIndicator = document.getElementById('cheatIndicator')
-				if (cheatIndicator) {
-					cheatIndicator.remove()
-				}
 
 				// Flash power LED red rapidly for cheat activation
 				let flashCount = 0
@@ -1504,6 +1608,32 @@
 					}
 					flashPowerLED('#ff3333', 50)
 					flashCount++
+				}, 100)
+
+				// Delay the actual cheat mode activation slightly
+				setTimeout(() => {
+					// Set all cheat mode flags and settings
+					cheatMode = true
+					window.cheatMode = true
+					window.gameSpeed = 0.5
+					window.cheatPoints = 10
+
+					// Create or update cheat mode indicator
+					let cheatIndicator = document.getElementById('cheatIndicator')
+					if (cheatIndicator) {
+						cheatIndicator.remove()
+					}
+
+					console.log('Game state updated:', {
+						cheatMode: window.cheatMode,
+						gameSpeed: window.gameSpeed,
+						cheatPoints: window.cheatPoints,
+					})
+
+					// Reset Konami sequence and restore game input
+					konamiIndex = 0
+					waitingForAB = false
+					console.log('Cheat mode activated and game input restored')
 				}, 100)
 			}
 
@@ -1591,21 +1721,40 @@
 				try {
 					const isFinalKnockout =
 						window.shareData && window.shareData.roundsLeft === 0
-					const t = isFinalKnockout
+					const text = isFinalKnockout
 						? `I clapped cheeks and got ${window.shareData.score} points!`
 						: `Come clap some cheeks with me!`
+					const url = 'https://clappycheeks.com'
 
-					try {
-						await navigator.clipboard.writeText(t + ' clappycheeks.com')
-					} catch (e) {}
-
+					// Check if Web Share API is available
 					if (navigator.canShare) {
-						await navigator.share({
-							title: t,
-							url: 'https://clappycheeks.com',
-						})
+						const shareData = {
+							title: 'Clappy Cheeks',
+							text: text,
+							url: url,
+						}
+
+						// Check if we can share this data
+						if (navigator.canShare(shareData)) {
+							try {
+								await navigator.share(shareData)
+								return
+							} catch (e) {
+								console.log('Web Share API failed:', e)
+							}
+						}
 					}
-				} catch (e) {}
+
+					// Fallback to clipboard
+					try {
+						await navigator.clipboard.writeText(text + ' ' + url)
+						alert('Copied to clipboard!')
+					} catch (e) {
+						console.log('Clipboard API failed:', e)
+					}
+				} catch (e) {
+					console.error('Share failed:', e)
+				}
 			}
 
 			window.onGameEnd = (score, isGameOver, roundsLeft) => {
@@ -1651,6 +1800,51 @@
 				if (isTouchDevice()) {
 					document.body.classList.add('touch-device')
 				}
+
+				// Prevent zoom on double tap
+				let lastTouchEnd = 0
+				document.addEventListener(
+					'touchend',
+					(event) => {
+						const now = Date.now()
+						if (now - lastTouchEnd <= 300) {
+							event.preventDefault()
+						}
+						lastTouchEnd = now
+					},
+					{ passive: false }
+				)
+
+				// Prevent zoom on pinch
+				document.addEventListener(
+					'touchmove',
+					(event) => {
+						if (event.touches.length > 1) {
+							event.preventDefault()
+						}
+					},
+					{ passive: false }
+				)
+
+				// Prevent zoom on gesture
+				document.addEventListener(
+					'gesturestart',
+					(event) => {
+						event.preventDefault()
+					},
+					{ passive: false }
+				)
+
+				// Lock viewport on orientation change
+				window.addEventListener('orientationchange', () => {
+					const meta = document.querySelector('meta[name="viewport"]')
+					if (meta) {
+						meta.setAttribute(
+							'content',
+							'width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover'
+						)
+					}
+				})
 			})
 		</script>
 	</body>
