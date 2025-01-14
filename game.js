@@ -536,58 +536,67 @@ class Game {
 	updateRing() {
 		this.ring.removeChildren()
 
-		const canvas = this.app.view
-		const width = canvas.width
-		const height = canvas.height
+		const width = this.app.screen.width
+		const height = this.app.screen.height
 
 		// Ring dimensions relative to canvas
-		const ringTop = height * 0.75 // Position at 75% of canvas height
-		const ringBottom = height + height * 0.1 // Extend 10% below canvas
-		const postWidth = width * 0.02 // 2% of canvas width
+		const ringPadding = height * 0.05 // 5% padding from edges
+		const ringTop = height * 0.2 // Position at 10% of canvas height
+		const ringBottom = height + ringPadding // Extend slightly below canvas
+		const postWidth = Math.max(width * 0.015, 10) // 1% of width, min 6px
 		const postHeight = height * 0.2 // 20% of canvas height
-		const floorExtension = width // Extend full width beyond edges
+		const floorExtension = width * 0.1 // Extend 10% beyond edges
+
+		// Center offset for the entire ring
+		const centerOffset = width * 0.1 // 10% of width for centering
+		const ringLeft = centerOffset
+		const ringRight = width - centerOffset
 
 		// Ring floor
 		const floor = new PIXI.Graphics()
 		floor.beginFill(0x00cec4)
-		floor.moveTo(-floorExtension, ringTop)
-		floor.lineTo(width + floorExtension, ringTop)
-		floor.lineTo(width + floorExtension, ringBottom)
-		floor.lineTo(-floorExtension, ringBottom)
+		floor.moveTo(ringLeft - floorExtension, ringTop - floorExtension / 3)
+		floor.lineTo(ringRight + floorExtension, ringTop - floorExtension / 2)
+		floor.lineTo(ringRight + floorExtension, ringBottom)
+		floor.lineTo(ringLeft - floorExtension, ringBottom)
 		floor.endFill()
 		this.ring.addChild(floor)
 
 		// Ring posts
 		const posts = new PIXI.Graphics()
 		posts.beginFill(0xffffff)
-		posts.drawRect(-postWidth, ringTop - postHeight, postWidth, postHeight)
-		posts.drawRect(width, ringTop - postHeight, postWidth, postHeight)
+		posts.drawRect(ringLeft, ringTop - postHeight, postWidth, postHeight) // Left post
+		posts.drawRect(
+			ringRight - postWidth,
+			ringTop - postHeight,
+			postWidth,
+			postHeight
+		) // Right post
 		posts.endFill()
 		this.ring.addChild(posts)
 
 		// Ring ropes
 		const ropes = new PIXI.Graphics()
-		ropes.lineStyle(Math.max(width * 0.004, 2), 0xff69b4)
+		const ropeThickness = Math.max(width * 0.002, 4) // Min thickness of 2px
+		ropes.lineStyle(ropeThickness, 0xff69b4)
 
+		// Draw three ropes on each side
 		for (let i = 0; i < 3; i++) {
-			const topY = ringTop - postHeight + (i + 1) * (postHeight / 3)
-			const bottomY = ringBottom - i * (height * 0.02)
+			const ropeSpacing = postHeight / 4 // Even spacing between ropes
+			const topY = ringTop - postHeight + ropeSpacing * (i + 1)
+			const bottomY = ringBottom - (ringPadding * (i + 1)) / 2
 
 			// Left side rope
-			ropes.moveTo(-postWidth / 2, topY)
-			ropes.lineTo(-floorExtension, bottomY)
+			ropes.moveTo(ringLeft + postWidth / 2, topY)
+			ropes.lineTo(ringLeft - floorExtension, bottomY)
 
 			// Right side rope
-			ropes.moveTo(width + postWidth / 2, topY)
-			ropes.lineTo(width + floorExtension, bottomY)
+			ropes.moveTo(ringRight - postWidth / 2, topY)
+			ropes.lineTo(ringRight + floorExtension, bottomY)
 
-			// Top rope
-			ropes.moveTo(-postWidth / 2, topY)
-			ropes.lineTo(width + postWidth / 2, topY)
-
-			// Bottom rope
-			ropes.moveTo(-floorExtension, bottomY)
-			ropes.lineTo(width + floorExtension, bottomY)
+			// Horizontal rope connecting posts
+			ropes.moveTo(ringLeft + postWidth / 2, topY)
+			ropes.lineTo(ringRight - postWidth / 2, topY)
 		}
 		this.ring.addChild(ropes)
 	}
@@ -1490,9 +1499,8 @@ class Game {
 		// Clear existing background
 		this.background.removeChildren()
 
-		const canvas = this.app.view
-		const width = canvas.width
-		const height = canvas.height
+		const width = this.app.screen.width
+		const height = this.app.screen.height
 
 		// Create grid pattern that fills entire canvas
 		const gridGraphics = new PIXI.Graphics()
@@ -1509,8 +1517,8 @@ class Game {
 		// Calculate grid offsets to center the pattern
 		const centerX = width / 2
 		const centerY = height / 2
-		const startX = centerX % gridSize
-		const startY = centerY % gridSize
+		const startX = (centerX % gridSize) - gridSize / 2
+		const startY = (centerY % gridSize) - gridSize / 2
 
 		// Draw horizontal lines from center
 		for (let y = startY; y <= height; y += gridSize) {
@@ -1539,20 +1547,19 @@ class Game {
 			// Add crowd at top of screen
 			const crowdTexture = PIXI.Assets.get('crowd')
 			if (crowdTexture) {
-				const crowdHeight = height * 0.12
+				const crowdHeight = height * 0.2
 				const scale = crowdHeight / crowdTexture.height
 				const scaledWidth = crowdTexture.width * scale
 
-				// Create crowd sprite with width to cover screen plus one tile on each side
+				// Create crowd sprite to fill width
 				this.crowd = new PIXI.TilingSprite(
 					crowdTexture,
-					width + scaledWidth * 2,
+					width, // Just use screen width
 					crowdHeight
 				)
 
-				// Center the tiling pattern
-				this.crowd.tilePosition.x = -scaledWidth + (width % scaledWidth) / 2
-				this.crowd.position.set(-scaledWidth, 0)
+				// Position at top of screen
+				this.crowd.position.set(0, 0)
 				this.crowd.tileScale.set(scale)
 				this.crowd.alpha = 0.6
 				this.background.addChild(this.crowd)
