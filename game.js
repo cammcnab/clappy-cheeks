@@ -286,7 +286,7 @@ class Game {
 
 			// Remove loading screen and show title screen
 			console.log('Showing title screen...')
-			if (this.loadingText) {
+			if (this.loadingText && this.loadingText.parent) {
 				this.loadingText.parent.removeChild(this.loadingText)
 			}
 			this.updateHUD()
@@ -527,6 +527,7 @@ class Game {
 			this.cheeks.scale.set(scale)
 			this.cheeks.visible = false // Start hidden
 			this.gameLayer.addChild(this.cheeks)
+			console.log('Cheeks sprite created and added to game layer')
 		} else {
 			console.warn('Cheeks texture not found, using fallback shape')
 			this.cheeks = new PIXI.Graphics()
@@ -538,11 +539,17 @@ class Game {
 			this.cheeks.velocity = 0
 			this.cheeks.visible = false // Start hidden
 			this.gameLayer.addChild(this.cheeks)
+			console.log('Fallback cheeks shape created and added to game layer')
 		}
 
 		// Add gloves container to gameLayer
 		this.gloves.visible = false // Start hidden
 		this.gameLayer.addChild(this.gloves)
+		console.log('Game objects initialized:', {
+			cheeksAdded: this.gameLayer.children.includes(this.cheeks),
+			glovesAdded: this.gameLayer.children.includes(this.gloves),
+			gameLayerChildren: this.gameLayer.children.length,
+		})
 	}
 
 	updateGrid(graphics) {
@@ -665,6 +672,16 @@ class Game {
 
 		// Update background for current state
 		this.createBackground()
+
+		// Ensure game objects are visible during gameplay
+		if (gameState.gameStarted && !gameState.gameOver) {
+			if (this.cheeks) {
+				this.cheeks.visible = true
+			}
+			if (this.gloves) {
+				this.gloves.visible = true
+			}
+		}
 
 		// Draw appropriate screen
 		if (!gameState.gameStarted) {
@@ -965,18 +982,24 @@ class Game {
 
 			// Press space (after delay)
 			if (performance.now() - gameState.knockoutTime > KNOCKOUT_DELAY) {
-				const pressSpace = new PIXI.Text('PRESS SPACE', {
+				// Check if mobile device
+				const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+				const buttonText = isMobile ? 'TAP SCREEN' : 'PRESS SPACE'
+
+				const pressSpace = new PIXI.Text(buttonText, {
 					fontFamily: 'Press Start 2P',
 					fontSize: baseFontSize * 0.6,
-					fill: 0xffffff,
+					fill: 0xff0000,
 					align: 'center',
 				})
 				pressSpace.anchor.set(0.5)
 				pressSpace.y = baseFontSize * 5.2
 
-				// Blinking effect
+				// Blinking effect with color alternation
 				this.app.ticker.add(() => {
-					pressSpace.visible = Math.floor(performance.now() / 250) % 2
+					const time = performance.now()
+					pressSpace.style.fill =
+						Math.floor(time / 250) % 2 ? 0xff0000 : 0xffffff
 				})
 
 				mainContainer.addChild(pressSpace)
@@ -1172,7 +1195,14 @@ class Game {
 			gameStarted: gameState.gameStarted,
 			roundsLeft: gameState.roundsLeft,
 			gameOver: gameState.gameOver,
+			cheeksVisible: this.cheeks?.visible,
+			glovesVisible: this.gloves?.visible,
+			gameState: { ...gameState },
+			cheeksInitialized: !!this.cheeks,
+			glovesInitialized: !!this.gloves,
+			gameLayerChildren: this.gameLayer?.children?.length,
 		})
+
 		if (!gameState.gameStarted) {
 			if (gameState.roundsLeft > 0) {
 				console.log('Starting game...')
@@ -1187,7 +1217,12 @@ class Game {
 			performance.now() - gameState.knockoutTime > KNOCKOUT_DELAY
 		) {
 			if (gameState.roundsLeft > 0) {
-				console.log('Starting next round...')
+				console.log('Starting next round with state:', {
+					totalScore: gameState.totalScore,
+					currentRound: gameState.currentRound,
+					cheeksVisible: this.cheeks?.visible,
+					glovesVisible: this.gloves?.visible,
+				})
 				gameState.totalScore += gameState.score
 				gameState.currentRound++
 				this.startGame()
@@ -1195,6 +1230,10 @@ class Game {
 				gameState.gameOver = false
 				gameState.firstAction = false
 				gameState.gameStartTime = performance.now()
+				console.log('After starting next round:', {
+					cheeksVisible: this.cheeks?.visible,
+					glovesVisible: this.gloves?.visible,
+				})
 				playCheerSound()
 			}
 		} else if (!gameState.gameOver) {
@@ -1210,6 +1249,15 @@ class Game {
 	}
 
 	startGame() {
+		console.log('Starting game with state:', {
+			gameStarted: gameState.gameStarted,
+			roundsLeft: gameState.roundsLeft,
+			currentRound: gameState.currentRound,
+			gameOver: gameState.gameOver,
+			initialCheeksVisible: this.cheeks?.visible,
+			initialGlovesVisible: this.gloves?.visible,
+		})
+
 		gameState.score = 0
 		gameState.gameSpeed = 1
 		gameState.lastSpeedIncreaseScore = 0
@@ -1217,17 +1265,41 @@ class Game {
 		window.shareData = null
 
 		if (this.cheeks) {
-			this.cheeks.visible = true // Show player when game starts
+			console.log('Setting cheeks visibility to true')
+			this.cheeks.visible = true // Show cheeks when game starts
 			this.cheeks.x = this.app.screen.width * PLAYER_X
 			this.cheeks.y = this.app.screen.height / 2
 			this.cheeks.velocity = 0
+			console.log('Cheeks position:', {
+				x: this.cheeks.x,
+				y: this.cheeks.y,
+				visible: this.cheeks.visible,
+			})
+		} else {
+			console.warn('Cheeks object not initialized')
 		}
 
 		if (this.gloves) {
+			console.log('Setting gloves visibility to true')
 			this.gloves.visible = true // Show gloves when game starts
+			// Clear existing glove pairs
+			this.gloves.pairs.forEach((pair) => {
+				this.gloves.removeChild(pair)
+			})
 			this.gloves.pairs = []
 			this.spawnGloves()
+			console.log('Gloves state:', {
+				visible: this.gloves.visible,
+				pairs: this.gloves.pairs.length,
+			})
+		} else {
+			console.warn('Gloves object not initialized')
 		}
+
+		console.log('End of startGame:', {
+			cheeksVisible: this.cheeks?.visible,
+			glovesVisible: this.gloves?.visible,
+		})
 
 		this.updateHUD()
 	}
