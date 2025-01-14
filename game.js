@@ -290,7 +290,7 @@ class Game {
 		this.createBackground()
 
 		// Update debug overlay
-		this.updateDebugOverlay()
+		// this.updateDebugOverlay()
 	}
 
 	// Update all screen width/height references to use BASE_UNIT * 32 for width and BASE_UNIT * 18 for height
@@ -302,6 +302,7 @@ class Game {
 		return VIRTUAL_HEIGHT
 	}
 
+	/*
 	updateDebugOverlay() {
 		let debugOverlay = document.getElementById('debugOverlay')
 		if (!debugOverlay) {
@@ -342,6 +343,7 @@ class Game {
 			FPS: ${fps}
 		`
 	}
+	*/
 
 	async loadAssets() {
 		try {
