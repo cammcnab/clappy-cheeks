@@ -1757,6 +1757,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 		// If we're waiting for B/A but get an arrow key, reset
 		if (waitingForAB && key.startsWith('Arrow')) {
+			if (window.flashPowerLED) {
+				window.flashPowerLED('#ff3333') // Flash red for incorrect input
+			}
 			resetKonamiState()
 			return false
 		}
@@ -1764,7 +1767,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		if (key.toLowerCase() === konamiCode[konamiIndex].toLowerCase()) {
 			// Flash power LED for feedback
 			if (window.flashPowerLED) {
-				window.flashPowerLED('#3333ff')
+				window.flashPowerLED('#3333ff') // Flash blue for correct input
 			}
 
 			// Check if we've completed the arrow sequence
@@ -1813,29 +1816,8 @@ document.addEventListener('DOMContentLoaded', () => {
 			e.stopPropagation()
 		}
 
-		// Check if this is a valid Konami code input
-		const isValidKonamiInput =
-			konamiCode.includes(key) ||
-			konamiCode.includes('Arrow' + key.charAt(0).toUpperCase() + key.slice(1))
-
-		if (isValidKonamiInput) {
-			// Convert key format to match Konami code format
-			const formattedKey = key.startsWith('arrow')
-				? key
-				: key === 'a' || key === 'b'
-				? key
-				: 'Arrow' + key.charAt(0).toUpperCase() + key.slice(1)
-
-			// Handle Konami input and flash LED based on result
-			if (
-				formattedKey.toLowerCase() === konamiCode[konamiIndex].toLowerCase()
-			) {
-				window.flashPowerLED('#3333ff')
-			} else if (waitingForAB || konamiIndex > 0) {
-				window.flashPowerLED('#ff3333')
-			}
-			handleKonamiInput(formattedKey)
-		}
+		// Handle Konami input
+		handleKonamiInput(key)
 	})
 
 	// Expose Konami state and handlers for touch controls

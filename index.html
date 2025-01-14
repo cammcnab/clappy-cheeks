@@ -1382,58 +1382,11 @@
 			let cheatMode = false
 			let waitingForAB = false // New flag to track if we're waiting for A/B input
 
-			// Function to handle Konami code input
-			function handleKonamiInput(key) {
-				console.log('Key pressed:', key, 'Expected:', konamiCode[konamiIndex])
-
-				// Check if we're in the D-pad sequence (first 8 inputs)
-				const inDpadSequence = konamiIndex < 8
-
-				// If we're waiting for A/B but get a D-pad input, reset
-				if (waitingForAB && key.startsWith('Arrow')) {
-					console.log('Got D-pad input while waiting for A/B, resetting')
-					resetKonamiState()
-					return
-				}
-
-				if (key === konamiCode[konamiIndex]) {
-					console.log(
-						'Correct key! Progress:',
-						konamiIndex + 1,
-						'/',
-						konamiCode.length
-					)
-					flashPowerLED('#3333ff')
-					konamiIndex++
-
-					// Check if we've completed the D-pad sequence
-					if (konamiIndex === 8) {
-						console.log('D-pad sequence complete! Waiting for A/B...')
-						waitingForAB = true
-					}
-
-					if (konamiIndex === konamiCode.length) {
-						console.log('Konami code completed! Activating cheat mode...')
-						activateCheatMode()
-						resetKonamiState()
-					}
-				} else {
-					console.log('Wrong key, resetting sequence')
-					flashPowerLED('#ff3333')
-					resetKonamiState()
-				}
-			}
-
 			// Function to reset Konami state
 			function resetKonamiState() {
 				konamiIndex = 0
 				waitingForAB = false
 			}
-
-			// Add Konami code listener - works on any screen
-			document.addEventListener('keydown', (e) => {
-				handleKonamiInput(e.key)
-			})
 
 			// Initialize gamepad controls
 			document.addEventListener('DOMContentLoaded', () => {
@@ -1631,6 +1584,11 @@
 					window.cheatMode = true
 					window.gameSpeed = 0.5
 					window.cheatPoints = 10
+
+					// Update game HUD to show cheat mode
+					if (window.game) {
+						window.game.updateHUD()
+					}
 
 					// Create or update cheat mode indicator
 					let cheatIndicator = document.getElementById('cheatIndicator')
