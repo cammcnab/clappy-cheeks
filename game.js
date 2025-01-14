@@ -1083,6 +1083,16 @@ class Game {
 	}
 
 	handleInput() {
+		// Don't allow game input if we're in Konami sequence
+		if (
+			window.konamiState &&
+			(window.konamiState.isWaitingForAB() ||
+				window.konamiState.isCompletingKonami())
+		) {
+			console.log('Blocking game input during Konami sequence')
+			return
+		}
+
 		console.log('Input received:', {
 			gameStarted: gameState.gameStarted,
 			roundsLeft: gameState.roundsLeft,
@@ -1705,8 +1715,10 @@ document.addEventListener('DOMContentLoaded', () => {
 		initGame()
 	}
 
-	// Initialize Konami code
+	// Initialize Konami code state
 	let konamiIndex = 0
+	let waitingForAB = false // Flag to indicate we're in A/B sequence
+	let completingKonami = false // Flag to prevent any other input during completion
 	const konamiCode = [
 		'ArrowUp',
 		'ArrowUp',
@@ -1720,17 +1732,119 @@ document.addEventListener('DOMContentLoaded', () => {
 		'a',
 	]
 
-	window.addEventListener('keydown', (e) => {
-		if (e.key === konamiCode[konamiIndex]) {
+	// Function to reset Konami state
+	const resetKonamiState = () => {
+		konamiIndex = 0
+		waitingForAB = false
+		completingKonami = false
+	}
+
+	// Function to handle Konami input
+	const handleKonamiInput = (key) => {
+		// If we're in completion state, ignore all inputs
+		if (completingKonami) {
+			return true
+		}
+
+		console.log(
+			'Konami input:',
+			key,
+			'Current index:',
+			konamiIndex,
+			'Waiting for BA:',
+			waitingForAB
+		)
+
+		// If we're waiting for B/A but get an arrow key, reset
+		if (waitingForAB && key.startsWith('Arrow')) {
+			resetKonamiState()
+			return false
+		}
+
+		if (key.toLowerCase() === konamiCode[konamiIndex].toLowerCase()) {
+			// Flash power LED for feedback
+			if (window.flashPowerLED) {
+				window.flashPowerLED('#3333ff')
+			}
+
+			// Check if we've completed the arrow sequence
+			if (konamiIndex === 7) {
+				console.log('Arrow sequence complete, waiting for BA...')
+				waitingForAB = true
+			}
+
+			// Increment after checking for arrow sequence
 			konamiIndex++
+
+			// Check if we've completed the entire sequence
 			if (konamiIndex === konamiCode.length) {
+				console.log('Konami code completed!')
+				completingKonami = true // Lock all inputs
+
 				if (!window.cheatMode && window.game) {
 					window.game.activateCheatMode()
 				}
-				konamiIndex = 0
+
+				// Delay reset to prevent any immediate game input
+				setTimeout(() => {
+					resetKonamiState()
+				}, 500) // Increased delay for safety
+
+				return true
 			}
 		} else {
-			konamiIndex = 0
+			// Flash red for incorrect input
+			if (window.flashPowerLED) {
+				window.flashPowerLED('#ff3333')
+			}
+			resetKonamiState()
+		}
+
+		return waitingForAB
+	}
+
+	// Keyboard event handler
+	window.addEventListener('keydown', (e) => {
+		const key = e.key.toLowerCase()
+
+		// If we're waiting for A/B input or completing Konami, prevent all input
+		if ((waitingForAB && (key === 'a' || key === 'b')) || completingKonami) {
+			e.preventDefault()
+			e.stopPropagation()
+		}
+
+		// Check if this is a valid Konami code input
+		const isValidKonamiInput =
+			konamiCode.includes(key) ||
+			konamiCode.includes('Arrow' + key.charAt(0).toUpperCase() + key.slice(1))
+
+		if (isValidKonamiInput) {
+			// Convert key format to match Konami code format
+			const formattedKey = key.startsWith('arrow')
+				? key
+				: key === 'a' || key === 'b'
+				? key
+				: 'Arrow' + key.charAt(0).toUpperCase() + key.slice(1)
+
+			// Handle Konami input and flash LED based on result
+			if (
+				formattedKey.toLowerCase() === konamiCode[konamiIndex].toLowerCase()
+			) {
+				window.flashPowerLED('#3333ff')
+			} else if (waitingForAB || konamiIndex > 0) {
+				window.flashPowerLED('#ff3333')
+			}
+			handleKonamiInput(formattedKey)
 		}
 	})
+
+	// Expose Konami state and handlers for touch controls
+	window.konamiState = {
+		code: konamiCode,
+		getIndex: () => konamiIndex,
+		isWaitingForAB: () => waitingForAB,
+		isCompletingKonami: () => completingKonami,
+		handleInput: handleKonamiInput,
+		reset: resetKonamiState,
+	}
 })

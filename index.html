@@ -1489,9 +1489,11 @@
 					button.pressHandler = (e) => {
 						e.preventDefault()
 						e.stopPropagation()
-						handleKonamiInput(
-							'Arrow' + direction.charAt(0).toUpperCase() + direction.slice(1)
-						)
+						if (window.konamiState) {
+							window.konamiState.handleInput(
+								'Arrow' + direction.charAt(0).toUpperCase() + direction.slice(1)
+							)
+						}
 					}
 
 					// Remove any existing listeners using the stored handler
@@ -1512,25 +1514,37 @@
 						e.preventDefault()
 						e.stopPropagation()
 
-						// Check if this button press is the next expected Konami code input
-						const isNextKonamiInput =
-							konamiCode[konamiIndex].toLowerCase() === action.toLowerCase()
+						// Check if we're waiting for B/A input for Konami code
+						if (window.konamiState && window.konamiState.isWaitingForAB()) {
+							// Check if this button press is the next expected Konami code input
+							const nextExpectedInput =
+								window.konamiState.code[window.konamiState.getIndex()]
+							const isNextKonamiInput =
+								nextExpectedInput.toLowerCase() === action.toLowerCase()
 
-						// If we're in the A/B sequence (after D-pad) and this is the next input
-						if (waitingForAB && isNextKonamiInput) {
-							handleKonamiInput(action.toLowerCase())
-							// Skip game input during Konami sequence
+							console.log('BA Check:', {
+								action,
+								nextExpected: nextExpectedInput,
+								isNext: isNextKonamiInput,
+								index: window.konamiState.getIndex(),
+							})
+
+							// Handle the input if it's correct
+							if (isNextKonamiInput) {
+								window.konamiState.handleInput(action.toLowerCase())
+							}
+
+							// Always return during BA sequence, regardless of correct/incorrect input
 							return
 						}
 
-						// Only allow game input if we're completely done with Konami sequence
-						if (
-							!waitingForAB &&
-							konamiIndex === 0 &&
-							!cheatMode &&
-							window.game &&
-							window.game.handleInput
-						) {
+						// Don't allow game input during completion
+						if (window.konamiState && window.konamiState.isCompletingKonami()) {
+							return
+						}
+
+						// Normal game input if not in Konami sequence
+						if (window.game && window.game.handleInput) {
 							window.game.handleInput()
 						}
 					}
