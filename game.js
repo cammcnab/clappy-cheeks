@@ -1009,7 +1009,7 @@ class Game {
 		// Clear existing HUD
 		this.hud.removeChildren()
 
-		// Points display (top left)
+		// Points display (left side)
 		const pointsText = `POINTS: ${gameState.score}`
 		const pointsStyle = {
 			fontFamily: 'Press Start 2P',
@@ -1018,17 +1018,11 @@ class Game {
 			align: 'left',
 		}
 
-		const pointsContainer = new PIXI.Graphics()
 		const pointsLabel = new PIXI.Text(pointsText, pointsStyle)
 		const pointsWidth = pointsLabel.width + padding * 2
 		const hudHeight = fontSize * 1.5
 
-		pointsContainer.beginFill(0x98ff98)
-		pointsContainer.drawRect(0, 0, pointsWidth, hudHeight)
-		pointsLabel.position.set(padding, hudHeight / 2)
-		pointsLabel.anchor.set(0, 0.5)
-
-		// Rounds display (top right)
+		// Rounds display (right side)
 		const roundsText = `ROUND ${gameState.currentRound}`
 		const roundsStyle = {
 			fontFamily: 'Press Start 2P',
@@ -1037,25 +1031,36 @@ class Game {
 			align: 'right',
 		}
 
-		const roundsContainer = new PIXI.Graphics()
 		const roundsLabel = new PIXI.Text(roundsText, roundsStyle)
 		const roundsWidth = roundsLabel.width + padding * 2
 
+		// Create containers with proper dimensions
+		const pointsContainer = new PIXI.Graphics()
+		pointsContainer.beginFill(0x98ff98)
+		pointsContainer.drawRect(0, 0, pointsWidth, hudHeight)
+
+		const roundsContainer = new PIXI.Graphics()
 		roundsContainer.beginFill(0x000000)
 		roundsContainer.drawRect(0, 0, roundsWidth, hudHeight)
-		roundsLabel.position.set(width - padding, hudHeight / 2)
+
+		// Position labels centered within their containers
+		pointsLabel.position.set(padding, hudHeight / 2)
+		pointsLabel.anchor.set(0, 0.5)
+
+		roundsLabel.position.set(roundsWidth - padding, hudHeight / 2)
 		roundsLabel.anchor.set(1, 0.5)
 
-		// Position containers
-		const margin = fontSize
-		pointsContainer.position.set(margin, margin)
-		roundsContainer.position.set(width - roundsWidth - margin, margin)
-
-		// Add containers and labels to HUD
+		// Create groups and add containers and labels
 		const pointsGroup = new PIXI.Container()
 		pointsGroup.addChild(pointsContainer, pointsLabel)
+
 		const roundsGroup = new PIXI.Container()
 		roundsGroup.addChild(roundsContainer, roundsLabel)
+
+		// Position groups to touch in center
+		const centerX = width / 2
+		pointsGroup.position.set(centerX - pointsWidth, 0)
+		roundsGroup.position.set(centerX, 0)
 
 		this.hud.addChild(pointsGroup, roundsGroup)
 	}
