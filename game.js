@@ -120,41 +120,65 @@ class Game {
 
 		// Initialize filters immediately
 		try {
-			if (PIXI.filters) {
-				// Create CRT filter with subtle settings
-				this.crtFilter = new PIXI.filters.CRTFilter({
-					curvature: 2,
-					lineWidth: 1,
-					lineContrast: 0.15,
-					verticalLine: false,
-					noise: 0.1,
-					noiseSize: 1,
-					seed: Math.random(),
-					vignetting: 0.2,
-					vignettingAlpha: 0.5,
-					vignettingBlur: 0.5,
-					time: 0,
-				})
-
-				// Create Bloom filter for subtle glow
-				this.bloomFilter = new PIXI.filters.BloomFilter({
-					strength: 0.3,
-					quality: 4,
-					blur: 1,
-					brightness: 1,
-				})
-
-				// Apply filters to the root stage to affect all UI elements
-				this.app.stage.filters = [this.bloomFilter, this.crtFilter]
-
-				// Enable hardware acceleration for better filter performance
-				this.app.renderer.view.style.transform = 'translateZ(0)'
-
-				console.log('Filters initialized early')
+			console.log('Initializing filters...')
+			if (!window.PIXI || !window.PIXI.filters) {
+				throw new Error('Filter classes not available')
 			}
+
+			// Create CRT filter with proper settings
+			this.crtFilter = new PIXI.filters.CRTFilter()
+			this.crtFilter.curvature = window.isMobile ? 4 : 8
+			this.crtFilter.lineWidth = 1.1
+			this.crtFilter.lineContrast = 0.1
+			this.crtFilter.verticalLine = false
+			this.crtFilter.noise = 0.05
+			this.crtFilter.noiseSize = 1.1
+			this.crtFilter.vignetting = 0.3
+			this.crtFilter.vignettingAlpha = 0.3
+			this.crtFilter.vignettingBlur = 0.4
+			this.crtFilter.seed = Math.random()
+			this.crtFilter.time = 0
+
+			// Create Bloom filter with proper settings
+			this.bloomFilter = new PIXI.filters.BloomFilter()
+			this.bloomFilter.strength = 20
+			this.bloomFilter.blurX = window.isMobile ? 2 : 6
+			this.bloomFilter.blurY = window.isMobile ? 1 : 4
+			this.bloomFilter.quality = 20
+			this.bloomFilter.kernelSize = 9
+
+			// Apply filters to the root stage to affect all UI elements
+			this.app.stage.filters = [this.bloomFilter, this.crtFilter]
+
+			// Force a render update to apply filters
+			this.app.renderer.render(this.app.stage)
+
+			// Enable hardware acceleration for better filter performance
+			this.app.renderer.view.style.transform = 'translateZ(0)'
+
+			console.log('Filters initialized successfully')
 		} catch (error) {
-			console.warn('Failed to initialize filters early:', error)
+			console.warn('Failed to initialize filters:', error)
+			// Continue without filters
+			this.bloomFilter = null
+			this.crtFilter = null
 		}
+
+		// Initialize audio only after user interaction
+		const initAudioOnInteraction = () => {
+			if (
+				PIXI.sound &&
+				PIXI.sound.context &&
+				PIXI.sound.context.state === 'suspended'
+			) {
+				PIXI.sound.context.resume()
+			}
+			document.removeEventListener('click', initAudioOnInteraction)
+			document.removeEventListener('touchstart', initAudioOnInteraction)
+		}
+
+		document.addEventListener('click', initAudioOnInteraction)
+		document.addEventListener('touchstart', initAudioOnInteraction)
 	}
 
 	async initializeGame() {
@@ -621,19 +645,20 @@ class Game {
 		// Use app.screen dimensions to ensure canvas-relative positioning
 		const width = this.app.screen.width
 		const height = this.app.screen.height
-		const maxWidth = width * 0.95 // Increased from 0.9
-		const maxHeight = height * 0.95 // Increased from 0.9
+		const maxWidth = width * 0.95
+		const maxHeight = height * 0.95
 
-		// Larger base font size
-		const baseFontSize = Math.min(height / 8, width / 10)
+		// Larger base font size - adjusted for text only
+		const baseFontSize = Math.min(height / 10, width / 14)
 
 		// Hide player/cheeks during title screen
 		if (this.cheeks) {
 			this.cheeks.visible = false
 		}
 
-		// Create main container that will be centered in canvas
-		const mainContainer = new PIXI.Container()
+		// Create separate containers for text and gloves
+		const textContainer = new PIXI.Container()
+		const glovesContainer = new PIXI.Container()
 
 		// Title group
 		const titleGroup = new PIXI.Container()
@@ -654,45 +679,47 @@ class Game {
 			align: 'center',
 		})
 		title2.anchor.set(0.5)
-		title2.y = baseFontSize * 1.2
+		title2.y = baseFontSize * 1.1
 
 		// Instructions
 		const instr1 = new PIXI.Text('3 ROUNDS PER MATCH', {
 			fontFamily: 'Press Start 2P',
-			fontSize: baseFontSize * 0.4,
+			fontSize: baseFontSize * 0.5,
 			fill: 0xffffff,
 			align: 'center',
 		})
 		instr1.anchor.set(0.5)
-		instr1.y = baseFontSize * 2.4
+		instr1.y = baseFontSize * 2.8
 
 		const instr2 = new PIXI.Text('DODGE PUNCHES FOR POINTS', {
 			fontFamily: 'Press Start 2P',
-			fontSize: baseFontSize * 0.4,
+			fontSize: baseFontSize * 0.5,
 			fill: 0xffffff,
 			align: 'center',
 		})
 		instr2.anchor.set(0.5)
-		instr2.y = baseFontSize * 3.2
+		instr2.y = baseFontSize * 3.6
 
 		titleGroup.addChild(title1, title2, instr1, instr2)
-		mainContainer.addChild(titleGroup)
+		textContainer.addChild(titleGroup)
 
 		// Press Space with gloves
 		if (gameState.roundsLeft > 0) {
 			const pressSpaceGroup = new PIXI.Container()
 
-			// Create gloves first
-			const gloveSize = baseFontSize * 1.5
-			const gloveSpacing = baseFontSize * 8
+			// Create gloves with larger size and spacing
+			const gloveSize = baseFontSize
+			const gloveSpacing = width * 1 // Use percentage of screen width
 			const armTexture = PIXI.Assets.get('arm')
+			// Check if mobile device
+			const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
 
 			if (armTexture) {
 				// Left glove
 				const leftGlove = new PIXI.Sprite(armTexture)
 				leftGlove.anchor.set(0.5)
-				leftGlove.x = -gloveSpacing
-				leftGlove.y = 0
+				leftGlove.x = -gloveSpacing / 2
+				leftGlove.y = -gloveSize / 8
 				leftGlove.angle = 90
 				leftGlove.scale.x = -1
 				leftGlove.width = gloveSize
@@ -702,8 +729,8 @@ class Game {
 				// Right glove
 				const rightGlove = new PIXI.Sprite(armTexture)
 				rightGlove.anchor.set(0.5)
-				rightGlove.x = gloveSpacing
-				rightGlove.y = 0
+				rightGlove.x = gloveSpacing / 2
+				rightGlove.y = -gloveSize / 8
 				rightGlove.angle = -90
 				rightGlove.width = gloveSize
 				rightGlove.height = (gloveSize / armTexture.width) * armTexture.height
@@ -713,22 +740,20 @@ class Game {
 				const moveHandler = () => {
 					const time = performance.now()
 					const step = Math.floor(time / 250) % 2
-					const moveAmount = step ? BASE_UNIT * 0.8 : 0
-					leftGlove.x = -gloveSpacing - moveAmount
-					rightGlove.x = gloveSpacing + moveAmount
+					const moveAmount = step ? BASE_UNIT * (isMobile ? 0.3 : 1) : 0
+					leftGlove.x = -gloveSpacing / 2 - moveAmount
+					rightGlove.x = gloveSpacing / 2 + moveAmount
 				}
 				this.app.ticker.add(moveHandler)
 				leftGlove._moveHandler = moveHandler
 			}
 
-			// Check if mobile device
-			const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
 			const buttonText = isMobile ? 'TAP SCREEN' : 'PRESS SPACE'
 
-			// Add press space/tap screen text after gloves
+			// Add press space/tap screen text
 			const pressSpace = new PIXI.Text(buttonText, {
 				fontFamily: 'Press Start 2P',
-				fontSize: baseFontSize * 0.6,
+				fontSize: baseFontSize * 0.7,
 				fill: 0xff0000,
 				align: 'center',
 			})
@@ -743,8 +768,8 @@ class Game {
 			this.app.ticker.add(blinkHandler)
 			pressSpace._blinkHandler = blinkHandler
 
-			pressSpaceGroup.y = baseFontSize * 5
-			mainContainer.addChild(pressSpaceGroup)
+			pressSpaceGroup.y = baseFontSize * 5.4
+			textContainer.addChild(pressSpaceGroup)
 		}
 
 		// Total score
@@ -754,37 +779,37 @@ class Game {
 				`TOTAL SCORE: ${gameState.totalScore}`,
 				{
 					fontFamily: 'Press Start 2P',
-					fontSize: baseFontSize * 0.4,
+					fontSize: baseFontSize * 0.5,
 					fill: 0xffffff,
 					align: 'center',
 				}
 			)
 			totalScoreText.anchor.set(0.5)
 			scoreGroup.addChild(totalScoreText)
-			scoreGroup.y = baseFontSize * 6.5
-			mainContainer.addChild(scoreGroup)
+			scoreGroup.y = baseFontSize * 6.0
+			textContainer.addChild(scoreGroup)
 		}
 
-		// Center the main container in canvas and scale if needed
-		mainContainer.x = width / 2
-		mainContainer.y = height * 0.3
+		// Position and scale text container
+		textContainer.x = width / 2
+		textContainer.y = height * 0.25
 
-		// Get bounds of all content
-		const bounds = mainContainer.getBounds()
+		// Get bounds of text content only
+		const bounds = textContainer.getBounds()
 
-		// Calculate scale needed to fit within max dimensions
+		// Only constrain by height, allow width to extend
 		const scale = Math.min(
-			maxWidth / bounds.width,
 			maxHeight / bounds.height,
 			1 // Never scale up
 		)
 
-		// Apply scale if content is too large
+		// Apply scale to text container if needed
 		if (scale < 1) {
-			mainContainer.scale.set(scale)
+			textContainer.scale.set(scale)
 		}
 
-		this.hud.addChild(mainContainer)
+		// Add containers to HUD
+		this.hud.addChild(textContainer)
 		this.drawCopyright()
 	}
 
@@ -1226,16 +1251,11 @@ class Game {
 	gameLoop(delta) {
 		if (document.hidden) return
 
-		// Update filters
-		if (this.crtFilter) {
-			this.crtFilter.time += delta * 0.5
-		}
-		if (this.rgbSplitFilter) {
-			// Subtle pulsing chromatic aberration
-			const time = performance.now() / 1000
-			const amount = Math.sin(time) * 0.5
-			this.rgbSplitFilter.red = [-2 - amount, 0]
-			this.rgbSplitFilter.blue = [2 + amount, 0]
+		// Update filters if they exist
+		if (this.crtFilter && this.bloomFilter) {
+			// Update CRT filter time and seed for animation
+			this.crtFilter.time += delta * 0.1
+			this.crtFilter.seed = Math.random()
 		}
 
 		if (gameState.gameStarted && !gameState.gameOver) {
