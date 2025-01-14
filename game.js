@@ -1,18 +1,22 @@
 // Game constants
-const CHEEKS_SIZE = 64 // Base size for cheeks sprite
-const GRAVITY = 0.4
-const CLAP_SPEED = -8.0
-const GLOVE_WIDTH = 50
-let GLOVE_OPENING = 250
-const GLOVE_SET_GAP = 0.65 // Percentage of screen width between arm sets
-const GLOVE_SPEED = 4.0
+const GRAVITY = 0.12
+const CLAP_SPEED = -4.0 // This is how fast the cheeks move upward when the player taps/clicks - negative means up
+const GLOVE_SET_GAP = 0.5
+const SPAWN_OFFSET = 1.05
+const PLAYER_X = 0.45
+const GLOVE_SPEED = 2.5
 const KNOCKOUT_DELAY = 1500
 const SPEED_INCREASE = 0.08
-const MAX_SPEED = 1.6
+const MAX_SPEED = 2
 const SQUISH_DURATION = 100
-const BASE_UNIT = 32 // Base unit for sizing elements
-const VIRTUAL_WIDTH = BASE_UNIT * 24 // Reduced from 32 to make game taller
-const VIRTUAL_HEIGHT = BASE_UNIT * 20 // Increased from 18 to make game taller
+
+// Screen-relative constants (these will be calculated in the Game class)
+let GLOVE_WIDTH
+let GLOVE_OPENING
+let MIN_GAP
+let MAX_GAP
+let CHEEKS_SIZE
+let ARM_SCALE
 
 // Game state
 const gameState = {
@@ -76,8 +80,14 @@ class Game {
 		// Don't add gloves yet - will be added after initialization
 		this.uiContainer.addChild(this.hud)
 
+		// Initialize screen-relative constants
+		this.updateScreenConstants()
+
 		// Add resize handler
-		window.addEventListener('resize', () => this.handleResize())
+		window.addEventListener('resize', () => {
+			this.handleResize()
+		})
+
 		// Initial resize to set up layout
 		this.handleResize()
 
@@ -86,6 +96,20 @@ class Game {
 
 		// Initialize game after font loads
 		this.initializeGame()
+
+		// Start game loop
+		this.app.ticker.add((delta) => this.gameLoop(delta))
+	}
+
+	updateScreenConstants() {
+		const height = this.screenHeight
+		// Update global constants based on screen height
+		GLOVE_WIDTH = height * 0.12
+		MIN_GAP = height * 0.3
+		MAX_GAP = height * 0.45
+		GLOVE_OPENING = MIN_GAP + Math.random() * (MAX_GAP - MIN_GAP)
+		CHEEKS_SIZE = height * 0.12
+		ARM_SCALE = height * 0.12
 	}
 
 	showQuickStartScreen() {
@@ -290,6 +314,9 @@ class Game {
 		this.uiContainer.scale.set(1)
 		this.uiContainer.position.set(0, 0)
 
+		// Update screen constants
+		this.updateScreenConstants()
+
 		// Force immediate background update
 		this.createBackground()
 
@@ -304,15 +331,29 @@ class Game {
 				const relativeY = this.cheeks.y / this.app.screen.height
 				this.cheeks.x = this.app.screen.width * relativeX
 				this.cheeks.y = this.app.screen.height * relativeY
+
+				// Update cheeks scale
+				const targetSize = CHEEKS_SIZE
+				const cheeksTexture = PIXI.Assets.get('cheeks')
+				const baseScale = cheeksTexture
+					? targetSize / Math.max(cheeksTexture.width, cheeksTexture.height)
+					: 1
+				this.cheeks.scale.set(baseScale)
 			}
 
 			if (this.gloves) {
-				// Update glove positions
+				// Update glove positions and scales
 				this.gloves.pairs.forEach((pair) => {
 					const relativeX = pair.x / this.app.screen.width
-					const relativeY = pair.gapY / this.app.screen.height
 					pair.x = this.app.screen.width * relativeX
-					pair.gapY = this.app.screen.height * relativeY
+
+					// Update glove scales
+					pair.children.forEach((glove) => {
+						if (glove instanceof PIXI.Sprite) {
+							glove.width = ARM_SCALE
+							glove.scale.y = glove.scale.x
+						}
+					})
 				})
 			}
 		}
@@ -323,11 +364,11 @@ class Game {
 
 	// Update all screen width/height references to use BASE_UNIT * 32 for width and BASE_UNIT * 18 for height
 	get screenWidth() {
-		return VIRTUAL_WIDTH
+		return this.app.screen.width
 	}
 
 	get screenHeight() {
-		return VIRTUAL_HEIGHT
+		return this.app.screen.height
 	}
 
 	/*
@@ -475,19 +516,24 @@ class Game {
 			console.log('Creating cheeks sprite with texture')
 			this.cheeks = new PIXI.Sprite(cheeksTexture)
 			this.cheeks.anchor.set(0.5)
-			this.cheeks.x = this.app.screen.width / 3
+			// Position exactly in center
+			this.cheeks.x = this.app.screen.width / 2
 			this.cheeks.y = this.app.screen.height / 2
 			this.cheeks.velocity = 0
-			this.cheeks.scale.set(BASE_UNIT / CHEEKS_SIZE)
+			// Scale based on screen height
+			const targetSize = CHEEKS_SIZE
+			const scale =
+				targetSize / Math.max(cheeksTexture.width, cheeksTexture.height)
+			this.cheeks.scale.set(scale)
 			this.cheeks.visible = false // Start hidden
 			this.gameLayer.addChild(this.cheeks)
 		} else {
 			console.warn('Cheeks texture not found, using fallback shape')
 			this.cheeks = new PIXI.Graphics()
 			this.cheeks.beginFill(0xffa500)
-			this.cheeks.drawCircle(0, 0, BASE_UNIT)
+			this.cheeks.drawCircle(0, 0, CHEEKS_SIZE / 2)
 			this.cheeks.endFill()
-			this.cheeks.x = this.app.screen.width / 3
+			this.cheeks.x = this.app.screen.width / 2
 			this.cheeks.y = this.app.screen.height / 2
 			this.cheeks.velocity = 0
 			this.cheeks.visible = false // Start hidden
@@ -556,7 +602,7 @@ class Game {
 		const floor = new PIXI.Graphics()
 		floor.beginFill(0x00cec4)
 		floor.moveTo(ringLeft - floorExtension, ringTop - floorExtension / 3)
-		floor.lineTo(ringRight + floorExtension, ringTop - floorExtension / 2)
+		floor.lineTo(ringRight + floorExtension, ringTop - floorExtension / 3)
 		floor.lineTo(ringRight + floorExtension, ringBottom)
 		floor.lineTo(ringLeft - floorExtension, ringBottom)
 		floor.endFill()
@@ -729,7 +775,7 @@ class Game {
 				const moveHandler = () => {
 					const time = performance.now()
 					const step = Math.floor(time / 250) % 2
-					const moveAmount = step ? BASE_UNIT * (isMobile ? 0.3 : 1) : 0
+					const moveAmount = step ? height * 0.02 * (isMobile ? 0.3 : 1) : 0 // 2% of screen height
 					leftGlove.x = -gloveSpacing / 2 - moveAmount
 					rightGlove.x = gloveSpacing / 2 + moveAmount
 				}
@@ -1172,8 +1218,8 @@ class Game {
 
 		if (this.cheeks) {
 			this.cheeks.visible = true // Show player when game starts
-			this.cheeks.x = this.screenWidth / 3
-			this.cheeks.y = this.screenHeight / 2
+			this.cheeks.x = this.app.screen.width * PLAYER_X
+			this.cheeks.y = this.app.screen.height / 2
 			this.cheeks.velocity = 0
 		}
 
@@ -1189,60 +1235,74 @@ class Game {
 	spawnGloves() {
 		const width = this.screenWidth
 		const height = this.screenHeight
-		const safePadding = Math.max(BASE_UNIT * 3, width * 0.08)
-		const safeHeight = height - safePadding * 2
+		const safePadding = height * 0.05 // 5% of screen height
 
-		// Increase minimum gap between arms
-		GLOVE_OPENING = Math.min(height * 0.35, BASE_UNIT * 10)
+		// Randomize the gap size relative to screen height
+		GLOVE_OPENING = MIN_GAP + Math.random() * (MAX_GAP - MIN_GAP)
 
-		// Adjust the spawn range to prevent arms from being too close to edges
-		const minY = safePadding + GLOVE_OPENING * 0.8
-		const maxY = height - safePadding - GLOVE_OPENING * 0.8
-		let y = Math.random() * (maxY - minY) + minY
+		// Calculate gap position - between 30% and 70% of screen height
+		const minY = height * 0.3
+		const maxY = height * 0.7
+		let gapCenter = minY + Math.random() * (maxY - minY)
 
-		// Create glove pair container
+		// Create glove pair container - spawn well off screen
 		const pair = new PIXI.Container()
-		pair.x = width + safePadding
-		pair.gapY = y
-		pair.passed = false
 
-		const armWidth = Math.min(width, height) / 8
-		const armHeight = armWidth * 2 // Default height if texture is missing
-		const gapHalf = GLOVE_OPENING / 2
+		// If this is the first pair, spawn at initial position
+		// Otherwise, spawn relative to the last pair's position
+		if (this.gloves.pairs.length === 0) {
+			pair.x = width * SPAWN_OFFSET
+		} else {
+			const lastPair = this.gloves.pairs[this.gloves.pairs.length - 1]
+			pair.x = lastPair.x + width * GLOVE_SET_GAP
+		}
+
+		pair.gapY = gapCenter
+		pair.passed = false
 
 		// Create gloves
 		const armTexture = PIXI.Assets.get('arm')
 		if (armTexture) {
-			// Create sprite-based gloves
-			const topGlove = new PIXI.Sprite(armTexture)
-			topGlove.anchor.set(0.5, 0)
-			topGlove.x = 0
-			topGlove.y = -gapHalf
-			topGlove.angle = 180
-			topGlove.width = armWidth
-			topGlove.height = (armWidth / armTexture.width) * armTexture.height
+			// Calculate dimensions based on screen height
+			const targetWidth = ARM_SCALE
+			const naturalRatio = armTexture.height / armTexture.width
+			const armHeight = targetWidth * naturalRatio
 
+			// Top glove - pinned to top of screen
+			const topGlove = new PIXI.Sprite(armTexture)
+			topGlove.anchor.set(0.5, 0) // Anchor at top center
+			topGlove.x = 0
+			topGlove.y = 0
+			topGlove.angle = 180
+			topGlove.width = targetWidth
+			topGlove.scale.y = topGlove.scale.x
+			topGlove.position.y = gapCenter - GLOVE_OPENING / 2
+
+			// Bottom glove - pinned to bottom of screen
 			const bottomGlove = new PIXI.Sprite(armTexture)
-			bottomGlove.anchor.set(0.5, 0)
+			bottomGlove.anchor.set(0.5, 0) // Anchor at top center
 			bottomGlove.x = 0
-			bottomGlove.y = gapHalf
-			bottomGlove.width = armWidth
-			bottomGlove.height = (armWidth / armTexture.width) * armTexture.height
+			bottomGlove.y = gapCenter + GLOVE_OPENING / 2
+			bottomGlove.width = targetWidth
+			bottomGlove.scale.y = bottomGlove.scale.x
 
 			pair.addChild(topGlove, bottomGlove)
 		} else {
+			// For fallback shapes, use standard ratio
+			const armHeight = ARM_SCALE * ARM_HEIGHT_RATIO
+
 			// Create fallback shape-based gloves
 			const topGlove = new PIXI.Graphics()
 			topGlove.beginFill(0xff0000)
-			topGlove.drawRect(-armWidth / 2, -armHeight, armWidth, armHeight)
+			topGlove.drawRect(-ARM_SCALE / 2, 0, ARM_SCALE, armHeight)
 			topGlove.endFill()
-			topGlove.y = -gapHalf
+			topGlove.y = gapCenter - GLOVE_OPENING / 2
 
 			const bottomGlove = new PIXI.Graphics()
 			bottomGlove.beginFill(0xff0000)
-			bottomGlove.drawRect(-armWidth / 2, 0, armWidth, armHeight)
+			bottomGlove.drawRect(-ARM_SCALE / 2, 0, ARM_SCALE, armHeight)
 			bottomGlove.endFill()
-			bottomGlove.y = gapHalf
+			bottomGlove.y = gapCenter + GLOVE_OPENING / 2
 
 			pair.addChild(topGlove, bottomGlove)
 		}
@@ -1260,6 +1320,9 @@ class Game {
 			this.crtFilter.time += delta * 0.1
 			this.crtFilter.seed = Math.random()
 		}
+
+		// Update screen constants to ensure proper scaling
+		this.updateScreenConstants()
 
 		if (gameState.gameStarted && !gameState.gameOver) {
 			if (this.cheeks) {
@@ -1279,12 +1342,23 @@ class Game {
 						const progress = elapsed / SQUISH_DURATION
 						const xScale = 1 - 0.3 * Math.sin(progress * Math.PI)
 						const yScale = 1 + (1 - xScale) * 0.5
-						const baseScale = BASE_UNIT / CHEEKS_SIZE
+						// Use CHEEKS_SIZE for scaling
+						const targetSize = CHEEKS_SIZE
+						const cheeksTexture = PIXI.Assets.get('cheeks')
+						const baseScale = cheeksTexture
+							? targetSize / Math.max(cheeksTexture.width, cheeksTexture.height)
+							: 1
 						this.cheeks.scale.x = xScale * baseScale
 						this.cheeks.scale.y = yScale * baseScale
 					} else {
 						gameState.squishStartTime = 0
-						this.cheeks.scale.set(BASE_UNIT / CHEEKS_SIZE)
+						// Reset to normal scale
+						const targetSize = CHEEKS_SIZE
+						const cheeksTexture = PIXI.Assets.get('cheeks')
+						const baseScale = cheeksTexture
+							? targetSize / Math.max(cheeksTexture.width, cheeksTexture.height)
+							: 1
+						this.cheeks.scale.set(baseScale)
 					}
 				}
 			}
@@ -1305,18 +1379,16 @@ class Game {
 				// Remove off-screen gloves
 				for (let i = this.gloves.pairs.length - 1; i >= 0; i--) {
 					const pair = this.gloves.pairs[i]
-					if (pair.x + GLOVE_WIDTH <= 0) {
+					if (pair.x + ARM_SCALE <= 0) {
+						// Use ARM_SCALE instead of GLOVE_WIDTH
 						this.gloves.removeChild(pair)
 						this.gloves.pairs.splice(i, 1)
 					}
 				}
 
 				// Spawn new gloves if needed
-				if (
-					this.gloves.pairs.length === 0 ||
-					this.gloves.pairs[this.gloves.pairs.length - 1].x <
-						this.screenWidth * GLOVE_SET_GAP
-				) {
+				const lastPair = this.gloves.pairs[this.gloves.pairs.length - 1]
+				if (!lastPair || lastPair.x <= this.screenWidth * SPAWN_OFFSET) {
 					this.spawnGloves()
 				}
 			}
@@ -1329,45 +1401,50 @@ class Game {
 				this.updateHUD()
 			}
 		}
+
+		// Force HUD update every frame to ensure UI stays in sync
+		this.updateHUD()
 	}
 
 	checkCollisions() {
 		if (!this.cheeks || !this.gloves) return false
 
-		const size = Math.min(this.screenWidth, this.screenHeight) / 15
+		// Use CHEEKS_SIZE for collision box
 		const cheeksBox = {
-			x: this.cheeks.x - size,
-			y: this.cheeks.y - size,
-			width: size * 2,
-			height: size * 2,
+			x: this.cheeks.x - CHEEKS_SIZE * 0.4, // 80% of cheeks size for hit box
+			y: this.cheeks.y - CHEEKS_SIZE * 0.4,
+			width: CHEEKS_SIZE * 0.8,
+			height: CHEEKS_SIZE * 0.8,
 		}
 
 		for (const pair of this.gloves.pairs) {
-			const armWidth = Math.min(this.screenWidth, this.screenHeight) / 8
-			const armTexture = PIXI.Assets.get('images/arm.png')
-			const armHeight = armTexture
-				? (armWidth / armTexture.width) * armTexture.height
-				: armWidth * 2 // Default height if texture is missing
-			const gapHalf = GLOVE_OPENING / 2
+			// Get the actual sprite dimensions and positions from the container
+			const topGlove = pair.children[0]
+			const bottomGlove = pair.children[1]
 
-			// Collision boxes match actual glove dimensions
-			const topGlove = {
-				x: pair.x - armWidth / 2,
-				y: pair.gapY - gapHalf - armHeight,
-				width: armWidth,
-				height: armHeight,
+			// Get the global positions of the gloves
+			const topBounds = topGlove.getBounds()
+			const bottomBounds = bottomGlove.getBounds()
+
+			// Create slightly smaller collision boxes for gloves (90% of sprite size)
+			const shrinkFactor = 0.9
+			const topCollision = {
+				x: topBounds.x + (topBounds.width * (1 - shrinkFactor)) / 2,
+				y: topBounds.y + (topBounds.height * (1 - shrinkFactor)) / 2,
+				width: topBounds.width * shrinkFactor,
+				height: topBounds.height * shrinkFactor,
 			}
 
-			const bottomGlove = {
-				x: pair.x - armWidth / 2,
-				y: pair.gapY + gapHalf,
-				width: armWidth,
-				height: armHeight,
+			const bottomCollision = {
+				x: bottomBounds.x + (bottomBounds.width * (1 - shrinkFactor)) / 2,
+				y: bottomBounds.y + (bottomBounds.height * (1 - shrinkFactor)) / 2,
+				width: bottomBounds.width * shrinkFactor,
+				height: bottomBounds.height * shrinkFactor,
 			}
 
 			if (
-				this.intersectRect(cheeksBox, topGlove) ||
-				this.intersectRect(cheeksBox, bottomGlove)
+				this.intersectRect(cheeksBox, topCollision) ||
+				this.intersectRect(cheeksBox, bottomCollision)
 			) {
 				playKnockoutSound()
 				window.shareData = null
@@ -1583,7 +1660,7 @@ class Game {
 
 		const width = this.screenWidth
 		const height = this.screenHeight
-		const fontSize = Math.min(BASE_UNIT * 0.8, width / 20)
+		const fontSize = Math.min(height * 0.04, width * 0.05) // 4% of screen height
 
 		const errorText = new PIXI.Text(message, {
 			fontFamily: 'Press Start 2P',
