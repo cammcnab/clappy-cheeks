@@ -73,7 +73,7 @@ class Game {
 		// Set up container hierarchy
 		this.gameContainer.addChild(this.background)
 		this.gameContainer.addChild(this.gameLayer)
-		this.gameLayer.addChild(this.gloves)
+		// Don't add gloves yet - will be added after initialization
 		this.uiContainer.addChild(this.hud)
 
 		// Add resize handler
@@ -91,6 +91,14 @@ class Game {
 	showQuickStartScreen() {
 		// Clear any existing HUD content
 		this.hud.removeChildren()
+
+		// Hide player and gloves during loading screen
+		if (this.gloves) {
+			this.gloves.visible = false
+		}
+		if (this.cheeks) {
+			this.cheeks.visible = false
+		}
 
 		const width = this.app.screen.width
 		const height = this.app.screen.height
@@ -127,7 +135,7 @@ class Game {
 
 			// Create CRT filter with proper settings
 			this.crtFilter = new PIXI.filters.CRTFilter()
-			this.crtFilter.curvature = window.isMobile ? 4 : 8
+			this.crtFilter.curvature = window.isMobile ? 2 : 8
 			this.crtFilter.lineWidth = 1.1
 			this.crtFilter.lineContrast = 0.1
 			this.crtFilter.verticalLine = false
@@ -142,8 +150,8 @@ class Game {
 			// Create Bloom filter with proper settings
 			this.bloomFilter = new PIXI.filters.BloomFilter()
 			this.bloomFilter.strength = 20
-			this.bloomFilter.blurX = window.isMobile ? 2 : 6
-			this.bloomFilter.blurY = window.isMobile ? 1 : 4
+			this.bloomFilter.blurX = window.isMobile ? 2 : 4
+			this.bloomFilter.blurY = window.isMobile ? 1 : 2
 			this.bloomFilter.quality = 20
 			this.bloomFilter.kernelSize = 9
 
@@ -205,6 +213,7 @@ class Game {
 						assets: [
 							{ name: 'cheeks', srcs: 'images/cheeks.png' },
 							{ name: 'arm', srcs: 'images/arm.png' },
+							{ name: 'crowd', srcs: 'images/crowd.png' },
 						],
 					},
 					{
@@ -270,51 +279,46 @@ class Game {
 		const parentWidth = parent.clientWidth
 		const parentHeight = parent.clientHeight
 
-		// Update app renderer size
+		// Update app renderer size to match parent exactly
 		this.app.renderer.resize(parentWidth, parentHeight)
 
-		// Calculate scale to fit parent while maintaining aspect ratio
-		const scale = Math.min(
-			parentWidth / VIRTUAL_WIDTH,
-			parentHeight / VIRTUAL_HEIGHT
-		)
-
-		// Scale and center the game container
-		this.gameContainer.scale.set(scale)
-		this.gameContainer.position.set(
-			(parentWidth - VIRTUAL_WIDTH * scale) / 2,
-			(parentHeight - VIRTUAL_HEIGHT * scale) / 2
-		)
+		// Fill entire width
+		this.gameContainer.scale.set(1)
+		this.gameContainer.position.set(0, 0)
 
 		// Update UI container to use actual screen dimensions
 		this.uiContainer.scale.set(1)
 		this.uiContainer.position.set(0, 0)
 
-		// Update game objects positions
-		if (this.cheeks) {
-			this.cheeks.x = VIRTUAL_WIDTH / 3
-			if (!gameState.gameStarted) {
-				this.cheeks.y = VIRTUAL_HEIGHT / 2
+		// Force immediate background update
+		this.createBackground()
+
+		// Update HUD for current game state
+		this.updateHUD()
+
+		// Update game objects if game is running
+		if (gameState.gameStarted && !gameState.gameOver) {
+			if (this.cheeks) {
+				// Keep cheeks at same relative position
+				const relativeX = this.cheeks.x / this.app.screen.width
+				const relativeY = this.cheeks.y / this.app.screen.height
+				this.cheeks.x = this.app.screen.width * relativeX
+				this.cheeks.y = this.app.screen.height * relativeY
+			}
+
+			if (this.gloves) {
+				// Update glove positions
+				this.gloves.pairs.forEach((pair) => {
+					const relativeX = pair.x / this.app.screen.width
+					const relativeY = pair.gapY / this.app.screen.height
+					pair.x = this.app.screen.width * relativeX
+					pair.gapY = this.app.screen.height * relativeY
+				})
 			}
 		}
 
-		// Update crowd sprite if it exists
-		if (this.crowd) {
-			this.crowd.width = VIRTUAL_WIDTH
-			this.crowd.height = BASE_UNIT * 8
-		}
-
-		// Update glove gaps
-		GLOVE_OPENING = BASE_UNIT * 8
-
-		// Update HUD with actual screen dimensions
-		this.updateHUD()
-
-		// Update background
-		this.createBackground()
-
-		// Update debug overlay
-		// this.updateDebugOverlay()
+		// Force a render update
+		this.app.renderer.render(this.app.stage)
 	}
 
 	// Update all screen width/height references to use BASE_UNIT * 32 for width and BASE_UNIT * 18 for height
@@ -465,18 +469,6 @@ class Game {
 	}
 
 	async initGameObjects() {
-		// Create crowd sprite
-		const crowdTexture = PIXI.Assets.get('crowd')
-		if (crowdTexture) {
-			this.crowd = new PIXI.TilingSprite(
-				crowdTexture,
-				this.app.screen.width,
-				BASE_UNIT * 8
-			)
-			this.crowd.alpha = 0.6
-			this.background.addChild(this.crowd)
-		}
-
 		// Create cheeks sprite
 		const cheeksTexture = PIXI.Assets.get('cheeks')
 		if (cheeksTexture) {
@@ -487,6 +479,7 @@ class Game {
 			this.cheeks.y = this.app.screen.height / 2
 			this.cheeks.velocity = 0
 			this.cheeks.scale.set(BASE_UNIT / CHEEKS_SIZE)
+			this.cheeks.visible = false // Start hidden
 			this.gameLayer.addChild(this.cheeks)
 		} else {
 			console.warn('Cheeks texture not found, using fallback shape')
@@ -497,15 +490,16 @@ class Game {
 			this.cheeks.x = this.app.screen.width / 3
 			this.cheeks.y = this.app.screen.height / 2
 			this.cheeks.velocity = 0
+			this.cheeks.visible = false // Start hidden
 			this.gameLayer.addChild(this.cheeks)
 		}
 
 		// Add gloves container to gameLayer
+		this.gloves.visible = false // Start hidden
 		this.gameLayer.addChild(this.gloves)
 	}
 
 	updateGrid(graphics) {
-		// Get actual canvas dimensions
 		const canvas = this.app.view
 		const width = canvas.width
 		const height = canvas.height
@@ -513,101 +507,87 @@ class Game {
 		// Clear any existing graphics
 		graphics.clear()
 
-		// Calculate grid dimensions with margin to ensure full canvas coverage
-		const gridSpacing = BASE_UNIT * 1.2
-		const margin = Math.max(width, height) * 0.2
-		const totalWidth = width + margin * 2
-		const totalHeight = height + margin * 2
-
-		// Fill background to match grid size
-		graphics.beginFill(0x000044)
-		graphics.drawRect(-margin, -margin, totalWidth, totalHeight)
+		// Fill entire canvas with blue background
+		graphics.beginFill(0x000044, 1)
+		graphics.drawRect(0, 0, width, height)
 		graphics.endFill()
 
-		// Thinner, more visible lines
-		graphics.lineStyle(Math.max(1, BASE_UNIT / 30), 0x4444ff, 0.15)
+		// Draw grid lines with higher alpha for better visibility
+		graphics.lineStyle(1, 0x4444ff, 0.3)
 
 		// Draw horizontal lines
-		const horizontalLines = Math.ceil(totalHeight / gridSpacing)
+		const gridSpacing = height * 0.05 // 5% of canvas height
+		const horizontalLines = Math.ceil(height / gridSpacing) + 1
 		for (let i = 0; i <= horizontalLines; i++) {
-			const baseY = i * gridSpacing - margin
-			graphics.moveTo(-margin, baseY)
-			graphics.lineTo(width + margin, baseY)
+			const y = i * gridSpacing
+			graphics.moveTo(0, y)
+			graphics.lineTo(width, y)
 		}
 
 		// Draw vertical lines
-		const verticalLines = Math.ceil(totalWidth / gridSpacing)
+		const verticalLines = Math.ceil(width / gridSpacing) + 1
 		for (let i = 0; i <= verticalLines; i++) {
-			const baseX = i * gridSpacing - margin
-			graphics.moveTo(baseX, -margin)
-			graphics.lineTo(baseX, height + margin)
+			const x = i * gridSpacing
+			graphics.moveTo(x, 0)
+			graphics.lineTo(x, height)
 		}
 	}
 
 	updateRing() {
 		this.ring.removeChildren()
 
-		const width = this.screenWidth
-		const height = this.screenHeight
+		const canvas = this.app.view
+		const width = canvas.width
+		const height = canvas.height
 
-		// Ring elements
-		const insetX = BASE_UNIT * 1.5
-		const ringTop = BASE_UNIT * 4
-		const ringBottom = height + BASE_UNIT * 2
-		const postWidth = BASE_UNIT * 0.8
-		const postHeight = BASE_UNIT * 3
+		// Ring dimensions relative to canvas
+		const ringTop = height * 0.75 // Position at 75% of canvas height
+		const ringBottom = height + height * 0.1 // Extend 10% below canvas
+		const postWidth = width * 0.02 // 2% of canvas width
+		const postHeight = height * 0.2 // 20% of canvas height
+		const floorExtension = width // Extend full width beyond edges
 
 		// Ring floor
 		const floor = new PIXI.Graphics()
 		floor.beginFill(0x00cec4)
-		floor.moveTo(insetX, ringTop)
-		floor.lineTo(width - insetX, ringTop)
-		floor.lineTo(width + BASE_UNIT * 8, ringBottom)
-		floor.lineTo(-BASE_UNIT * 8, ringBottom)
+		floor.moveTo(-floorExtension, ringTop)
+		floor.lineTo(width + floorExtension, ringTop)
+		floor.lineTo(width + floorExtension, ringBottom)
+		floor.lineTo(-floorExtension, ringBottom)
 		floor.endFill()
 		this.ring.addChild(floor)
 
 		// Ring posts
 		const posts = new PIXI.Graphics()
 		posts.beginFill(0xffffff)
-		posts.drawRect(
-			insetX * 1.5,
-			ringTop - postHeight / 2,
-			postWidth,
-			postHeight
-		)
-		posts.drawRect(
-			width - insetX * 1.5 - postWidth,
-			ringTop - postHeight / 2,
-			postWidth,
-			postHeight
-		)
+		posts.drawRect(-postWidth, ringTop - postHeight, postWidth, postHeight)
+		posts.drawRect(width, ringTop - postHeight, postWidth, postHeight)
 		posts.endFill()
 		this.ring.addChild(posts)
 
 		// Ring ropes
 		const ropes = new PIXI.Graphics()
-		ropes.lineStyle(Math.max(BASE_UNIT / 6, 2), 0xff69b4)
+		ropes.lineStyle(Math.max(width * 0.004, 2), 0xff69b4)
 
 		for (let i = 0; i < 3; i++) {
-			const topY = ringTop - postHeight * 0.6 + (i + 1) * (postHeight / 3)
-			const bottomY = ringBottom - i * BASE_UNIT
+			const topY = ringTop - postHeight + (i + 1) * (postHeight / 3)
+			const bottomY = ringBottom - i * (height * 0.02)
 
 			// Left side rope
-			ropes.moveTo(insetX * 1.5 + postWidth / 2, topY)
-			ropes.lineTo(-BASE_UNIT * 6 + i * BASE_UNIT * 2, bottomY)
+			ropes.moveTo(-postWidth / 2, topY)
+			ropes.lineTo(-floorExtension, bottomY)
 
 			// Right side rope
-			ropes.moveTo(width - insetX * 1.5 - postWidth / 2, topY)
-			ropes.lineTo(width + BASE_UNIT * 6 - i * BASE_UNIT * 2, bottomY)
+			ropes.moveTo(width + postWidth / 2, topY)
+			ropes.lineTo(width + floorExtension, bottomY)
 
 			// Top rope
-			ropes.moveTo(insetX * 1.5 + postWidth / 2, topY)
-			ropes.lineTo(width - insetX * 1.5 - postWidth / 2, topY)
+			ropes.moveTo(-postWidth / 2, topY)
+			ropes.lineTo(width + postWidth / 2, topY)
 
 			// Bottom rope
-			ropes.moveTo(-BASE_UNIT * 6 + i * BASE_UNIT * 2, bottomY)
-			ropes.lineTo(width + BASE_UNIT * 6 - i * BASE_UNIT * 2, bottomY)
+			ropes.moveTo(-floorExtension, bottomY)
+			ropes.lineTo(width + floorExtension, bottomY)
 		}
 		this.ring.addChild(ropes)
 	}
@@ -819,6 +799,14 @@ class Game {
 		const maxWidth = width * 0.9
 		const maxHeight = height * 0.9
 		const baseFontSize = Math.min(height / 10, width / 12)
+
+		// Hide gloves and player during game over screen
+		if (this.gloves) {
+			this.gloves.visible = false
+		}
+		if (this.cheeks) {
+			this.cheeks.visible = false
+		}
 
 		// Create main container for all content
 		const mainContainer = new PIXI.Container()
@@ -1176,6 +1164,7 @@ class Game {
 		}
 
 		if (this.gloves) {
+			this.gloves.visible = true // Show gloves when game starts
 			this.gloves.pairs = []
 			this.spawnGloves()
 		}
@@ -1456,10 +1445,17 @@ class Game {
 			? 'CHEAT MODE ACTIVATED'
 			: 'NOT © 2024 FWD:FWD:FWD:'
 
+		// Use same color as round score text during game over screens
+		const textColor = gameState.gameOver
+			? 0x004643
+			: window.cheatMode
+			? 0xff0000
+			: 0x8888ff
+
 		const copyright = new PIXI.Text(copyrightText, {
 			fontFamily: 'Press Start 2P',
 			fontSize: baseFontSize,
-			fill: window.cheatMode ? 0xff0000 : 0x8888ff,
+			fill: textColor,
 			align: 'center',
 		})
 		copyright.anchor.set(0.5)
@@ -1494,13 +1490,75 @@ class Game {
 		// Clear existing background
 		this.background.removeChildren()
 
-		// Create grid pattern
+		const canvas = this.app.view
+		const width = canvas.width
+		const height = canvas.height
+
+		// Create grid pattern that fills entire canvas
 		const gridGraphics = new PIXI.Graphics()
-		this.updateGrid(gridGraphics)
+
+		// Fill background with blue - 100% coverage
+		gridGraphics.beginFill(0x000044, 1)
+		gridGraphics.drawRect(0, 0, width, height)
+		gridGraphics.endFill()
+
+		// Draw grid lines - fixed size grid that tiles from center
+		gridGraphics.lineStyle(1, 0x4444ff, 0.3)
+		const gridSize = 32 // Fixed grid size
+
+		// Calculate grid offsets to center the pattern
+		const centerX = width / 2
+		const centerY = height / 2
+		const startX = centerX % gridSize
+		const startY = centerY % gridSize
+
+		// Draw horizontal lines from center
+		for (let y = startY; y <= height; y += gridSize) {
+			gridGraphics.moveTo(0, y)
+			gridGraphics.lineTo(width, y)
+		}
+		for (let y = startY - gridSize; y >= 0; y -= gridSize) {
+			gridGraphics.moveTo(0, y)
+			gridGraphics.lineTo(width, y)
+		}
+
+		// Draw vertical lines from center
+		for (let x = startX; x <= width; x += gridSize) {
+			gridGraphics.moveTo(x, 0)
+			gridGraphics.lineTo(x, height)
+		}
+		for (let x = startX - gridSize; x >= 0; x -= gridSize) {
+			gridGraphics.moveTo(x, 0)
+			gridGraphics.lineTo(x, height)
+		}
+
 		this.background.addChild(gridGraphics)
 
-		// Only create ring during actual gameplay
-		if (gameState.gameStarted && !gameState.gameOver) {
+		// Create ring and crowd for gameplay and game over screens, but not title screen
+		if (gameState.gameStarted || gameState.gameOver) {
+			// Add crowd at top of screen
+			const crowdTexture = PIXI.Assets.get('crowd')
+			if (crowdTexture) {
+				const crowdHeight = height * 0.12
+				const scale = crowdHeight / crowdTexture.height
+				const scaledWidth = crowdTexture.width * scale
+
+				// Create crowd sprite with width to cover screen plus one tile on each side
+				this.crowd = new PIXI.TilingSprite(
+					crowdTexture,
+					width + scaledWidth * 2,
+					crowdHeight
+				)
+
+				// Center the tiling pattern
+				this.crowd.tilePosition.x = -scaledWidth + (width % scaledWidth) / 2
+				this.crowd.position.set(-scaledWidth, 0)
+				this.crowd.tileScale.set(scale)
+				this.crowd.alpha = 0.6
+				this.background.addChild(this.crowd)
+			}
+
+			// Add ring
 			this.ring = new PIXI.Container()
 			this.updateRing()
 			this.background.addChild(this.ring)
@@ -1803,8 +1861,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 			// Check if we've completed the entire sequence
 			if (konamiIndex === konamiCode.length) {
-				console.log('Konami code completed!')
-				completingKonami = true // Lock all inputs
+				console.log('Arrow sequence complete, waiting for BA...')
+				waitingForAB = true
 
 				if (!window.cheatMode && window.game) {
 					window.game.activateCheatMode()
