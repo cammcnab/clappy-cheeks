@@ -1890,24 +1890,72 @@ class Game {
 		const startX = (centerX % gridSize) - gridSize / 2
 		const startY = (centerY % gridSize) - gridSize / 2
 
-		// Draw horizontal lines from center
+		// Calculate maximum distortion at corners (as percentage of screen size)
+		const maxDistortion = Math.min(width, height) * 0.15
+
+		// Draw horizontal curved lines from center
 		for (let y = startY; y <= height; y += gridSize) {
 			gridGraphics.moveTo(0, y)
-			gridGraphics.lineTo(width, y)
+			// Calculate distortion based on distance from center
+			const distFromCenter = Math.abs(y - centerY) / height
+			const curveHeight = maxDistortion * distFromCenter * distFromCenter
+			// Mirror the curve direction based on which side of center we're on
+			const direction = y < centerY ? -1 : 1
+			gridGraphics.bezierCurveTo(
+				width * 0.25,
+				y + curveHeight * direction, // First control point
+				width * 0.75,
+				y + curveHeight * direction, // Second control point
+				width,
+				y // End point
+			)
 		}
 		for (let y = startY - gridSize; y >= 0; y -= gridSize) {
 			gridGraphics.moveTo(0, y)
-			gridGraphics.lineTo(width, y)
+			const distFromCenter = Math.abs(y - centerY) / height
+			const curveHeight = maxDistortion * distFromCenter * distFromCenter
+			// Mirror the curve direction based on which side of center we're on
+			const direction = y < centerY ? -1 : 1
+			gridGraphics.bezierCurveTo(
+				width * 0.25,
+				y + curveHeight * direction,
+				width * 0.75,
+				y + curveHeight * direction,
+				width,
+				y
+			)
 		}
 
-		// Draw vertical lines from center
+		// Draw vertical curved lines
 		for (let x = startX; x <= width; x += gridSize) {
 			gridGraphics.moveTo(x, 0)
-			gridGraphics.lineTo(x, height)
+			const distFromCenter = Math.abs(x - centerX) / width
+			const curveWidth = maxDistortion * distFromCenter * distFromCenter
+			// Mirror the curve direction based on which side of center we're on
+			const direction = x < centerX ? -1 : 1
+			gridGraphics.bezierCurveTo(
+				x + curveWidth * direction,
+				height * 0.25, // First control point
+				x + curveWidth * direction,
+				height * 0.75, // Second control point
+				x,
+				height // End point
+			)
 		}
 		for (let x = startX - gridSize; x >= 0; x -= gridSize) {
 			gridGraphics.moveTo(x, 0)
-			gridGraphics.lineTo(x, height)
+			const distFromCenter = Math.abs(x - centerX) / width
+			const curveWidth = maxDistortion * distFromCenter * distFromCenter
+			// Mirror the curve direction based on which side of center we're on
+			const direction = x < centerX ? -1 : 1
+			gridGraphics.bezierCurveTo(
+				x + curveWidth * direction,
+				height * 0.25,
+				x + curveWidth * direction,
+				height * 0.75,
+				x,
+				height
+			)
 		}
 		this.background.addChild(gridGraphics)
 
