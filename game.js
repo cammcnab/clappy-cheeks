@@ -45,9 +45,130 @@ let audio = {
 	context: null,
 }
 
+// Debug monitoring
+const DEBUG = {
+	lastFrameTime: 0,
+	frameCount: 0,
+	fps: 0,
+	memoryUsage: [],
+	errors: [],
+	logError: function (error) {
+		console.error('[DEBUG]', error)
+		this.errors.push({ time: Date.now(), error })
+		if (this.errors.length > 50) this.errors.shift()
+	},
+}
+
+// Asset loading
+const ASSETS = {
+	textures: {
+		cheeks: './images/cheeks.png',
+		arm: './images/arm.png',
+		crowd: './images/crowd.png',
+	},
+	fonts: {
+		pressStart2P: './fonts/PressStart2P-Regular.css',
+	},
+	audio: {
+		clap1: './audio/claps/clap1.mp3',
+		clap2: './audio/claps/clap2.mp3',
+		clap3: './audio/claps/clap3.mp3',
+		clap4: './audio/claps/clap4.mp3',
+		clap5: './audio/claps/clap5.mp3',
+		clap6: './audio/claps/clap6.mp3',
+		clap7: './audio/claps/clap7.mp3',
+		clap8: './audio/claps/clap8.mp3',
+		clap9: './audio/claps/clap9.mp3',
+		cheer: './audio/cheering.mp3',
+		boo: './audio/booing.mp3',
+		konami: './audio/konami.mp3',
+	},
+}
+
+// Asset loading function
+async function loadGameAssets() {
+	try {
+		console.log('Loading game assets...')
+
+		// Load textures first
+		const texturePromises = Object.entries(ASSETS.textures).map(
+			async ([name, url]) => {
+				try {
+					// Check if texture is already loaded and valid
+					let texture = PIXI.Assets.get(name)
+					if (!texture || !texture.valid) {
+						console.log(`Loading texture: ${name} from ${url}`)
+						texture = await PIXI.Assets.load(url)
+						if (!texture || !texture.valid) {
+							throw new Error(`Failed to load texture: ${name}`)
+						}
+						// Cache the texture
+						PIXI.Assets.cache.set(name, texture)
+					} else {
+						console.log(`Texture ${name} already loaded and valid`)
+					}
+					return texture
+				} catch (error) {
+					console.warn(`Failed to load texture: ${name}`, error)
+					return null
+				}
+			}
+		)
+
+		// Wait for all textures to load
+		const textures = await Promise.all(texturePromises)
+		const allTexturesLoaded = textures.every((texture) => texture !== null)
+		if (!allTexturesLoaded) {
+			console.warn('Some textures failed to load')
+		}
+
+		// Load audio assets if not already loaded
+		if (PIXI.sound) {
+			const audioPromises = Object.entries(ASSETS.audio).map(
+				async ([name, url]) => {
+					try {
+						if (!PIXI.sound.exists(name)) {
+							await PIXI.sound.add(name, {
+								url,
+								preload: true,
+								volume: name.includes('clap')
+									? 0.3
+									: name === 'cheer'
+									? 0.1
+									: 0.3,
+							})
+							console.log(`Loaded audio: ${name}`)
+						} else {
+							console.log(`Audio ${name} already loaded`)
+						}
+					} catch (error) {
+						console.warn(`Failed to load audio: ${name}`, error)
+					}
+				}
+			)
+			await Promise.all(audioPromises)
+		}
+
+		console.log('All assets loaded successfully')
+		return true
+	} catch (error) {
+		console.error('Error loading assets:', error)
+		return false
+	}
+}
+
 // Game objects
 class Game {
 	constructor() {
+		// Initialize default text style first
+		this.defaultTextStyle = {
+			fontFamily: 'Press Start 2P',
+			fontSize: 32,
+			fill: 0xffffff,
+			align: 'center',
+			padding: 2,
+		}
+
 		// Create PixiJS application immediately with correct settings
 		this.app = new PIXI.Application({
 			width: window.innerWidth,
@@ -99,17 +220,6 @@ class Game {
 
 		// Start game loop
 		this.app.ticker.add((delta) => this.gameLoop(delta))
-	}
-
-	updateScreenConstants() {
-		const height = this.screenHeight
-		// Update global constants based on screen height
-		GLOVE_WIDTH = height * 0.12
-		MIN_GAP = height * 0.3
-		MAX_GAP = height * 0.45
-		GLOVE_OPENING = MIN_GAP + Math.random() * (MAX_GAP - MIN_GAP)
-		CHEEKS_SIZE = height * 0.12
-		ARM_SCALE = height * 0.12
 	}
 
 	showQuickStartScreen() {
@@ -213,89 +323,15 @@ class Game {
 		document.addEventListener('touchstart', initAudioOnInteraction)
 	}
 
-	async initializeGame() {
-		try {
-			console.log('Starting game initialization...')
-
-			// Show loading screen first
-			this.showQuickStartScreen()
-
-			// Wait for font to load first
-			try {
-				await document.fonts.load('10px "Press Start 2P"')
-				console.log('Font loaded successfully')
-			} catch (err) {
-				console.warn('Font loading failed:', err)
-			}
-
-			// Initialize assets
-			console.log('Setting up asset bundles...')
-			const manifest = {
-				bundles: [
-					{
-						name: 'essential',
-						assets: [
-							{ name: 'cheeks', srcs: 'images/cheeks.png' },
-							{ name: 'arm', srcs: 'images/arm.png' },
-							{ name: 'crowd', srcs: 'images/crowd.png' },
-						],
-					},
-					{
-						name: 'audio',
-						assets: [
-							...Array.from({ length: 9 }, (_, i) => ({
-								name: `clap${i + 1}`,
-								srcs: `audio/claps/clap${i + 1}.mp3`,
-							})),
-							{ name: 'cheer', srcs: 'audio/cheering.mp3' },
-							{ name: 'boo', srcs: 'audio/booing.mp3' },
-							{ name: 'konami', srcs: 'audio/konami.mp3' },
-						],
-					},
-				],
-			}
-
-			// Initialize assets with manifest
-			await PIXI.Assets.init({ manifest })
-
-			// Load essential assets first
-			console.log('Loading essential assets...')
-			const essentialAssets = await PIXI.Assets.loadBundle('essential')
-			if (!essentialAssets) {
-				throw new Error('Failed to load essential assets')
-			}
-
-			// Initialize game objects and input handlers
-			console.log('Initializing game objects...')
-			this.initGameObjects()
-			this.initInputHandlers()
-
-			// Load audio assets
-			console.log('Loading audio assets...')
-			try {
-				const audioAssets = await PIXI.Assets.loadBundle('audio')
-				await this.initializeAudio(audioAssets)
-			} catch (error) {
-				console.warn('Failed to load audio assets:', error)
-				audio.initialized = true
-			}
-
-			// Start game loop
-			console.log('Starting game loop...')
-			this.app.ticker.add(() => this.gameLoop(1))
-
-			// Remove loading screen and show title screen
-			console.log('Showing title screen...')
-			if (this.loadingText && this.loadingText.parent) {
-				this.loadingText.parent.removeChild(this.loadingText)
-			}
-			this.updateHUD()
-
-			console.log('Game initialization complete')
-		} catch (error) {
-			console.error('Failed to initialize game:', error)
-			this.showErrorScreen('Failed to initialize game: ' + error.message)
-		}
+	updateScreenConstants() {
+		const height = this.screenHeight
+		// Update global constants based on screen height
+		GLOVE_WIDTH = height * 0.12
+		MIN_GAP = height * 0.3
+		MAX_GAP = height * 0.45
+		GLOVE_OPENING = MIN_GAP + Math.random() * (MAX_GAP - MIN_GAP)
+		CHEEKS_SIZE = height * 0.12
+		ARM_SCALE = height * 0.12
 	}
 
 	handleResize() {
@@ -306,6 +342,13 @@ class Game {
 		// Update app renderer size to match parent exactly
 		this.app.renderer.resize(parentWidth, parentHeight)
 
+		// Update screen dimensions
+		this.screenWidth = this.app.screen.width
+		this.screenHeight = this.app.screen.height
+
+		// Update screen constants
+		this.updateScreenConstants()
+
 		// Fill entire width
 		this.gameContainer.scale.set(1)
 		this.gameContainer.position.set(0, 0)
@@ -313,9 +356,6 @@ class Game {
 		// Update UI container to use actual screen dimensions
 		this.uiContainer.scale.set(1)
 		this.uiContainer.position.set(0, 0)
-
-		// Update screen constants
-		this.updateScreenConstants()
 
 		// Force immediate background update
 		this.createBackground()
@@ -327,25 +367,26 @@ class Game {
 		if (gameState.gameStarted && !gameState.gameOver) {
 			if (this.cheeks) {
 				// Keep cheeks at same relative position
-				const relativeX = this.cheeks.x / this.app.screen.width
-				const relativeY = this.cheeks.y / this.app.screen.height
-				this.cheeks.x = this.app.screen.width * relativeX
-				this.cheeks.y = this.app.screen.height * relativeY
+				const relativeX = this.cheeks.x / this.screenWidth
+				const relativeY = this.cheeks.y / this.screenHeight
+				this.cheeks.x = this.screenWidth * relativeX
+				this.cheeks.y = this.screenHeight * relativeY
 
 				// Update cheeks scale
 				const targetSize = CHEEKS_SIZE
 				const cheeksTexture = PIXI.Assets.get('cheeks')
-				const baseScale = cheeksTexture
-					? targetSize / Math.max(cheeksTexture.width, cheeksTexture.height)
-					: 1
-				this.cheeks.scale.set(baseScale)
+				if (cheeksTexture && cheeksTexture.valid) {
+					const baseScale =
+						targetSize / Math.max(cheeksTexture.width, cheeksTexture.height)
+					this.cheeks.scale.set(baseScale)
+				}
 			}
 
 			if (this.gloves) {
 				// Update glove positions and scales
 				this.gloves.pairs.forEach((pair) => {
-					const relativeX = pair.x / this.app.screen.width
-					pair.x = this.app.screen.width * relativeX
+					const relativeX = pair.x / this.screenWidth
+					pair.x = this.screenWidth * relativeX
 
 					// Update glove scales
 					pair.children.forEach((glove) => {
@@ -362,174 +403,218 @@ class Game {
 		this.app.renderer.render(this.app.stage)
 	}
 
-	// Update all screen width/height references to use BASE_UNIT * 32 for width and BASE_UNIT * 18 for height
-	get screenWidth() {
-		return this.app.screen.width
-	}
-
-	get screenHeight() {
-		return this.app.screen.height
-	}
-
-	/*
-	updateDebugOverlay() {
-		let debugOverlay = document.getElementById('debugOverlay')
-		if (!debugOverlay) {
-			debugOverlay = document.createElement('div')
-			debugOverlay.id = 'debugOverlay'
-			debugOverlay.style.position = 'fixed'
-			debugOverlay.style.top = '10px'
-			debugOverlay.style.left = '10px'
-			debugOverlay.style.backgroundColor = 'rgba(0,0,0,0.7)'
-			debugOverlay.style.color = '#fff'
-			debugOverlay.style.padding = '10px'
-			debugOverlay.style.fontFamily = 'monospace'
-			debugOverlay.style.fontSize = '12px'
-			debugOverlay.style.zIndex = '10000'
-			debugOverlay.style.pointerEvents = 'none'
-			debugOverlay.style.transform = 'translateZ(0)'
-			document.body.appendChild(debugOverlay)
-		}
-
-		// Only update if app is initialized
-		if (!this.app || !this.app.stage) {
-			debugOverlay.innerHTML = 'Initializing...'
-			return
-		}
-
-		const fps = Math.round(this.app.ticker.FPS)
-		const scale = this.app.stage.scale.x || 1
-		const virtualWidth = VIRTUAL_WIDTH
-		const virtualHeight = VIRTUAL_HEIGHT
-		const gameSpeed = gameState.gameSpeed || 1
-
-		debugOverlay.innerHTML = `
-			Screen: ${window.innerWidth}x${window.innerHeight}<br>
-			Canvas: ${this.app.screen.width}x${this.app.screen.height}<br>
-			Virtual: ${virtualWidth}x${virtualHeight}<br>
-			Scale: ${scale.toFixed(2)}<br>
-			Speed: ${gameSpeed.toFixed(2)}x<br>
-			FPS: ${fps}
-		`
-	}
-	*/
-
-	async loadAssets() {
+	async showBasicLoadingScreen() {
 		try {
-			// Set base URL for assets
-			const baseURL = window.location.href.substring(
-				0,
-				window.location.href.lastIndexOf('/') + 1
-			)
+			// Clear any existing HUD content
+			this.hud.removeChildren()
 
-			// Load textures with error handling and timeout
-			const loadTextureWithTimeout = async (url, timeout = 5000) => {
-				try {
-					const texturePromise = PIXI.Assets.load(url)
-					const timeoutPromise = new Promise((_, reject) =>
-						setTimeout(() => reject(new Error('Timeout')), timeout)
-					)
-					return await Promise.race([texturePromise, timeoutPromise])
-				} catch (error) {
-					console.error(`Failed to load texture ${url}:`, error)
-					return null
-				}
+			// Hide game objects
+			if (this.gloves) this.gloves.visible = false
+			if (this.cheeks) this.cheeks.visible = false
+
+			// Create loading text with Arial font
+			const basicStyle = {
+				fontFamily: 'Arial',
+				fontSize: Math.min(
+					this.app.screen.height / 20,
+					this.app.screen.width / 40
+				),
+				fill: 0xffffff,
+				align: 'center',
 			}
 
-			console.log('Loading textures...')
-			const [cheeksTexture, armTexture, crowdTexture] = await Promise.all([
-				loadTextureWithTimeout(baseURL + 'images/cheeks.png'),
-				loadTextureWithTimeout(baseURL + 'images/arm.png'),
-				loadTextureWithTimeout(baseURL + 'images/crowd.png'),
-			])
-
-			// For mobile, just store the audio URLs for later use
-			const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-			if (isMobile) {
-				console.log('Mobile device detected, deferring audio loading')
-				audio.initialized = true
-			} else {
-				// Desktop audio loading
-				try {
-					const audioContext = new (window.AudioContext ||
-						window.webkitAudioContext)()
-
-					const loadAudio = async (url) => {
-						try {
-							const response = await fetch(url)
-							const arrayBuffer = await response.arrayBuffer()
-							return await audioContext.decodeAudioData(arrayBuffer)
-						} catch (error) {
-							console.warn(`Failed to load audio ${url}:`, error)
-							return null
-						}
-					}
-
-					// Load all audio files
-					console.log('Loading audio files...')
-					const audioBuffers = {
-						claps: await Promise.all(
-							Array.from({ length: 9 }, (_, i) =>
-								loadAudio(baseURL + `audio/claps/clap${i + 1}.mp3`)
-							)
-						),
-						cheer: await loadAudio(baseURL + 'audio/cheering.mp3'),
-						boo: await loadAudio(baseURL + 'audio/booing.mp3'),
-					}
-
-					audio.clapBuffers = audioBuffers.claps.filter(
-						(buffer) => buffer !== null
-					)
-					audio.cheerBuffer = audioBuffers.cheer
-					audio.booBuffer = audioBuffers.boo
-					audio.context = audioContext
-					audio.initialized = true
-
-					console.log('Audio loaded:', {
-						claps: audio.clapBuffers.length,
-						cheer: !!audio.cheerBuffer,
-						boo: !!audio.booBuffer,
-					})
-				} catch (error) {
-					console.warn('Error loading audio:', error)
-					audio.initialized = true
-				}
+			// Create loading text with error handling
+			const loadingText = new PIXI.Text('LOADING GAME ASSETS...', basicStyle)
+			if (loadingText && loadingText.texture) {
+				loadingText.anchor.set(0.5)
+				loadingText.x = this.app.screen.width / 2
+				loadingText.y = this.app.screen.height / 2 - 40
+				this.hud.addChild(loadingText)
+				this.loadingText = loadingText
 			}
 
-			// Only wait for textures
-			if (!cheeksTexture || !armTexture) {
-				throw new Error('Failed to load essential textures')
-			}
+			// Create loading bar container
+			const loadingBarContainer = new PIXI.Container()
+			loadingBarContainer.x = this.app.screen.width / 2
+			loadingBarContainer.y = this.app.screen.height / 2 + 20
 
-			console.log('Essential assets loaded')
+			// Create loading bar background
+			const barWidth = Math.min(this.app.screen.width * 0.8, 300)
+			const barHeight = 20
+			const barBg = new PIXI.Graphics()
+			barBg.beginFill(0x333333)
+			barBg.drawRect(-barWidth / 2, 0, barWidth, barHeight)
+			barBg.endFill()
+			loadingBarContainer.addChild(barBg)
+
+			// Create loading bar foreground
+			const barFg = new PIXI.Graphics()
+			barFg.beginFill(0x00ff00)
+			barFg.drawRect(-barWidth / 2, 0, 0, barHeight) // Start with 0 width
+			barFg.endFill()
+			loadingBarContainer.addChild(barFg)
+
+			// Add container to HUD
+			this.hud.addChild(loadingBarContainer)
+
+			// Store references
+			this.loadingBarContainer = loadingBarContainer
+			this.loadingBarFg = barFg
+			this.loadingBarWidth = barWidth
+
+			// Force a render update
+			this.app.renderer.render(this.app.stage)
+
+			// Return true to indicate successful initialization
 			return true
 		} catch (error) {
-			console.error('Error loading assets:', error)
+			console.warn('Error showing loading screen:', error)
 			return false
 		}
 	}
 
+	updateLoadingProgress(progress) {
+		try {
+			if (
+				!this.loadingBarFg ||
+				!this.loadingBarContainer ||
+				!this.loadingBarWidth
+			) {
+				return
+			}
+
+			// Calculate progress width
+			const progressWidth =
+				this.loadingBarWidth * Math.max(0, Math.min(1, progress))
+
+			// Update progress bar by creating a new shape instead of clearing
+			const barFg = new PIXI.Graphics()
+			barFg.beginFill(0x00ff00)
+			barFg.drawRect(-this.loadingBarWidth / 2, 0, progressWidth, 20)
+			barFg.endFill()
+
+			// Replace old foreground with new one
+			if (this.loadingBarFg.parent === this.loadingBarContainer) {
+				this.loadingBarContainer.removeChild(this.loadingBarFg)
+			}
+			this.loadingBarContainer.addChild(barFg)
+			this.loadingBarFg = barFg
+
+			// Force render update
+			this.app.renderer.render(this.app.stage)
+		} catch (error) {
+			console.warn('Error updating loading progress:', error)
+		}
+	}
+
+	async loadFonts() {
+		try {
+			// Create a font face observer for Press Start 2P
+			const fontFace = new FontFace(
+				'Press Start 2P',
+				'url(fonts/PressStart2P-Regular.woff2) format("woff2"), url(fonts/PressStart2P-Regular.woff) format("woff"), url(fonts/PressStart2P-Regular.ttf) format("truetype")'
+			)
+
+			// Wait for font to load
+			await fontFace.load()
+
+			// Add to document fonts
+			document.fonts.add(fontFace)
+
+			// Wait for all fonts to be ready
+			await document.fonts.ready
+
+			console.log('Fonts loaded successfully')
+			return true
+		} catch (error) {
+			console.warn('Error loading fonts:', error)
+			return false
+		}
+	}
+
+	async initializeGame() {
+		try {
+			console.log('Starting game initialization...')
+
+			// Show loading screen first with Arial font
+			const loadingScreenSuccess = await this.showBasicLoadingScreen()
+			if (!loadingScreenSuccess) {
+				throw new Error('Failed to show loading screen')
+			}
+
+			// Load fonts first
+			const fontsLoaded = await this.loadFonts()
+			if (!fontsLoaded) {
+				console.warn('Fonts failed to load, using fallback fonts')
+			}
+
+			// Load all game assets first
+			console.log('Loading game assets...')
+			const assetsLoaded = await loadGameAssets()
+			if (!assetsLoaded) {
+				console.warn('Failed to load some assets, using fallbacks where needed')
+			}
+
+			// Verify critical textures
+			const criticalTextures = ['arm', 'cheeks']
+			for (const textureName of criticalTextures) {
+				const texture = PIXI.Assets.get(textureName)
+				if (!texture || !texture.valid) {
+					console.warn(`Critical texture ${textureName} is invalid or missing`)
+				}
+			}
+
+			// Initialize game objects
+			await this.initGameObjects()
+
+			// Clear loading screen
+			this.hud.removeChildren()
+
+			// Create background first
+			this.createBackground()
+
+			// Show title screen
+			await this.drawTitleScreen()
+			console.log('Title screen drawn')
+
+			// Initialize input handlers
+			this.initInputHandlers()
+
+			// Start game loop
+			this.app.ticker.add((delta) => this.gameLoop(delta))
+
+			console.log('Game initialization complete')
+		} catch (error) {
+			console.error('Failed to initialize game:', error)
+			this.showErrorScreen('Failed to initialize game: ' + error.message)
+		}
+	}
+
 	async initGameObjects() {
-		// Create cheeks sprite
-		const cheeksTexture = PIXI.Assets.get('cheeks')
-		if (cheeksTexture) {
-			console.log('Creating cheeks sprite with texture')
-			this.cheeks = new PIXI.Sprite(cheeksTexture)
-			this.cheeks.anchor.set(0.5)
-			// Position exactly in center
-			this.cheeks.x = this.app.screen.width / 2
-			this.cheeks.y = this.app.screen.height / 2
-			this.cheeks.velocity = 0
-			// Scale based on screen height
-			const targetSize = CHEEKS_SIZE
-			const scale =
-				targetSize / Math.max(cheeksTexture.width, cheeksTexture.height)
-			this.cheeks.scale.set(scale)
-			this.cheeks.visible = false // Start hidden
-			this.gameLayer.addChild(this.cheeks)
-			console.log('Cheeks sprite created and added to game layer')
-		} else {
-			console.warn('Cheeks texture not found, using fallback shape')
+		// Create cheeks sprite with proper texture loading
+		try {
+			const cheeksTexture = await PIXI.Assets.load('./images/cheeks.png')
+			if (cheeksTexture && cheeksTexture.valid) {
+				console.log('Creating cheeks sprite with texture')
+				this.cheeks = new PIXI.Sprite(cheeksTexture)
+				this.cheeks.anchor.set(0.5)
+				// Position exactly in center
+				this.cheeks.x = this.app.screen.width / 2
+				this.cheeks.y = this.app.screen.height / 2
+				this.cheeks.velocity = 0
+				// Scale based on screen height
+				const targetSize = CHEEKS_SIZE
+				const scale =
+					targetSize / Math.max(cheeksTexture.width, cheeksTexture.height)
+				this.cheeks.scale.set(scale)
+				this.cheeks.visible = false // Start hidden
+				this.gameLayer.addChild(this.cheeks)
+				console.log('Cheeks sprite created and added to game layer')
+			} else {
+				throw new Error('Invalid cheeks texture')
+			}
+		} catch (error) {
+			console.warn('Cheeks texture not found, using fallback shape:', error)
 			this.cheeks = new PIXI.Graphics()
 			this.cheeks.beginFill(0xffa500)
 			this.cheeks.drawCircle(0, 0, CHEEKS_SIZE / 2)
@@ -587,16 +672,18 @@ class Game {
 	}
 
 	updateRing() {
+		if (!this.ring) return
+
 		this.ring.removeChildren()
 
-		const width = this.app.screen.width
-		const height = this.app.screen.height
+		const width = this.screenWidth
+		const height = this.screenHeight
 
-		// Ring dimensions relative to canvas
+		// Ring dimensions
 		const ringPadding = height * 0.05 // 5% padding from edges
-		const ringTop = height * 0.2 // Position at 10% of canvas height
+		const ringTop = height * 0.3 // Position at 30% of canvas height (moved down)
 		const ringBottom = height + ringPadding // Extend slightly below canvas
-		const postWidth = Math.max(width * 0.015, 10) // 1% of width, min 6px
+		const postWidth = Math.max(width * 0.015, 10) // 1.5% of width, min 10px
 		const postHeight = height * 0.2 // 20% of canvas height
 		const floorExtension = width * 0.1 // Extend 10% beyond edges
 
@@ -607,7 +694,7 @@ class Game {
 
 		// Ring floor
 		const floor = new PIXI.Graphics()
-		floor.beginFill(0x00cec4)
+		floor.beginFill(0x00cec4, 0.8) // Semi-transparent turquoise
 		floor.moveTo(ringLeft - floorExtension, ringTop - floorExtension / 3)
 		floor.lineTo(ringRight + floorExtension, ringTop - floorExtension / 3)
 		floor.lineTo(ringRight + floorExtension, ringBottom)
@@ -630,14 +717,17 @@ class Game {
 
 		// Ring ropes
 		const ropes = new PIXI.Graphics()
-		const ropeThickness = Math.max(width * 0.002, 4) // Min thickness of 2px
-		ropes.lineStyle(ropeThickness, 0xff69b4)
+		const ropeThickness = Math.max(width * 0.002, 4) // Min thickness of 4px
+		const ropeColors = [0xff0000, 0xffffff, 0xff0000] // Red, white, red
 
 		// Draw three ropes on each side
 		for (let i = 0; i < 3; i++) {
 			const ropeSpacing = postHeight / 4 // Even spacing between ropes
 			const topY = ringTop - postHeight + ropeSpacing * (i + 1)
 			const bottomY = ringBottom - (ringPadding * (i + 1)) / 2
+
+			// Set rope color
+			ropes.lineStyle(ropeThickness, ropeColors[i], 0.8)
 
 			// Left side rope
 			ropes.moveTo(ringLeft + postWidth / 2, topY)
@@ -652,259 +742,252 @@ class Game {
 			ropes.lineTo(ringRight - postWidth / 2, topY)
 		}
 		this.ring.addChild(ropes)
+
+		// Add ring to background behind crowd
+		this.background.addChild(this.ring)
 	}
 
-	updateHUD() {
-		// Remove existing ticker handlers
-		if (this.hud.children) {
-			this.hud.children.forEach((child) => {
-				if (child._blinkHandler) {
-					this.app.ticker.remove(child._blinkHandler)
+	async updateHUD() {
+		try {
+			// Clear existing HUD with proper cleanup
+			this.clearGameOverScreen()
+
+			// Update background for current state
+			this.createBackground()
+
+			// Ensure game objects are visible during gameplay
+			if (gameState.gameStarted && !gameState.gameOver) {
+				if (this.cheeks) {
+					this.cheeks.visible = true
 				}
-				if (child._moveHandler) {
-					this.app.ticker.remove(child._moveHandler)
+				if (this.gloves) {
+					this.gloves.visible = true
 				}
-			})
+			}
+
+			// Draw appropriate screen
+			if (!gameState.gameStarted) {
+				await this.drawTitleScreen()
+			} else if (gameState.gameOver) {
+				await this.drawGameOverScreen()
+			} else {
+				await this.drawGameHUD()
+			}
+
+			// Force a render update
+			this.app.renderer.render(this.app.stage)
+		} catch (error) {
+			console.error('Error updating HUD:', error)
+			this.showErrorScreen('Error updating HUD: ' + error.message)
 		}
+	}
 
-		// Clear existing HUD
-		this.hud.removeChildren()
+	async drawGameOverScreen() {
+		try {
+			const width = this.screenWidth
+			const height = this.screenHeight
+			const maxWidth = width * 0.95
+			const maxHeight = height * 0.95
 
-		// Update background for current state
-		this.createBackground()
-
-		// Ensure game objects are visible during gameplay
-		if (gameState.gameStarted && !gameState.gameOver) {
+			// Hide game objects
 			if (this.cheeks) {
-				this.cheeks.visible = true
+				this.cheeks.visible = false
 			}
 			if (this.gloves) {
-				this.gloves.visible = true
-			}
-		}
-
-		// Draw appropriate screen
-		if (!gameState.gameStarted) {
-			this.drawTitleScreen()
-		} else if (gameState.gameOver) {
-			this.drawGameOverScreen()
-		} else {
-			this.drawGameHUD()
-		}
-	}
-
-	drawTitleScreen() {
-		// Use app.screen dimensions to ensure canvas-relative positioning
-		const width = this.app.screen.width
-		const height = this.app.screen.height
-		const maxWidth = width * 0.95
-		const maxHeight = height * 0.95
-
-		// Larger base font size - adjusted for text only
-		const baseFontSize = Math.min(height / 10, width / 14)
-
-		// Hide player/cheeks during title screen
-		if (this.cheeks) {
-			this.cheeks.visible = false
-		}
-
-		// Create separate containers for text and gloves
-		const textContainer = new PIXI.Container()
-		const glovesContainer = new PIXI.Container()
-
-		// Title group
-		const titleGroup = new PIXI.Container()
-
-		const title1 = new PIXI.Text('CLAPPY', {
-			fontFamily: 'Press Start 2P',
-			fontSize: baseFontSize,
-			fill: 0xffa500,
-			align: 'center',
-		})
-		title1.anchor.set(0.5)
-		title1.y = 0
-
-		const title2 = new PIXI.Text('CHEEKS!!', {
-			fontFamily: 'Press Start 2P',
-			fontSize: baseFontSize,
-			fill: 0xffa500,
-			align: 'center',
-		})
-		title2.anchor.set(0.5)
-		title2.y = baseFontSize * 1.1
-
-		// Instructions
-		const instr1 = new PIXI.Text('3 ROUNDS PER MATCH', {
-			fontFamily: 'Press Start 2P',
-			fontSize: baseFontSize * 0.5,
-			fill: 0xffffff,
-			align: 'center',
-		})
-		instr1.anchor.set(0.5)
-		instr1.y = baseFontSize * 2.8
-
-		const instr2 = new PIXI.Text('DODGE PUNCHES FOR POINTS', {
-			fontFamily: 'Press Start 2P',
-			fontSize: baseFontSize * 0.5,
-			fill: 0xffffff,
-			align: 'center',
-		})
-		instr2.anchor.set(0.5)
-		instr2.y = baseFontSize * 3.6
-
-		titleGroup.addChild(title1, title2, instr1, instr2)
-		textContainer.addChild(titleGroup)
-
-		// Press Space with gloves
-		if (gameState.roundsLeft > 0) {
-			const pressSpaceGroup = new PIXI.Container()
-
-			// Create gloves with larger size and spacing
-			const gloveSize = baseFontSize
-			const gloveSpacing = width * 1 // Use percentage of screen width
-			const armTexture = PIXI.Assets.get('arm')
-			// Check if mobile device
-			const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-
-			if (armTexture) {
-				// Left glove
-				const leftGlove = new PIXI.Sprite(armTexture)
-				leftGlove.anchor.set(0.5)
-				leftGlove.x = -gloveSpacing / 2
-				leftGlove.y = -gloveSize / 8
-				leftGlove.angle = 90
-				leftGlove.scale.x = -1
-				leftGlove.width = gloveSize
-				leftGlove.height = (gloveSize / armTexture.width) * armTexture.height
-				pressSpaceGroup.addChild(leftGlove)
-
-				// Right glove
-				const rightGlove = new PIXI.Sprite(armTexture)
-				rightGlove.anchor.set(0.5)
-				rightGlove.x = gloveSpacing / 2
-				rightGlove.y = -gloveSize / 8
-				rightGlove.angle = -90
-				rightGlove.width = gloveSize
-				rightGlove.height = (gloveSize / armTexture.width) * armTexture.height
-				pressSpaceGroup.addChild(rightGlove)
-
-				// Retro-style stepped movement
-				const moveHandler = () => {
-					const time = performance.now()
-					const step = Math.floor(time / 250) % 2
-					const moveAmount = step ? height * 0.02 * (isMobile ? 0.3 : 1) : 0 // 2% of screen height
-					leftGlove.x = -gloveSpacing / 2 - moveAmount
-					rightGlove.x = gloveSpacing / 2 + moveAmount
-				}
-				this.app.ticker.add(moveHandler)
-				leftGlove._moveHandler = moveHandler
+				this.gloves.visible = false
 			}
 
-			const buttonText = isMobile ? 'TAP SCREEN' : 'PRESS SPACE'
+			// Create container for game over content
+			const gameOverContainer = new PIXI.Container()
+			gameOverContainer.name = 'gameOverContainer'
 
-			// Add press space/tap screen text
-			const pressSpace = new PIXI.Text(buttonText, {
-				fontFamily: 'Press Start 2P',
-				fontSize: baseFontSize * 0.7,
-				fill: 0xff0000,
-				align: 'center',
-			})
-			pressSpace.anchor.set(0.5)
-			pressSpaceGroup.addChild(pressSpace)
+			// Calculate base font size based on screen dimensions
+			const baseFontSize = Math.min(height / 10, width / 14)
 
-			// Color alternating effect
-			const blinkHandler = () => {
-				const time = performance.now()
-				pressSpace.style.fill = Math.floor(time / 250) % 2 ? 0xff0000 : 0xffffff
-			}
-			this.app.ticker.add(blinkHandler)
-			pressSpace._blinkHandler = blinkHandler
-
-			pressSpaceGroup.y = baseFontSize * 5.4
-			textContainer.addChild(pressSpaceGroup)
-		}
-
-		// Total score
-		if (gameState.totalScore > 0) {
-			const scoreGroup = new PIXI.Container()
-			const totalScoreText = new PIXI.Text(
-				`TOTAL SCORE: ${gameState.totalScore}`,
+			// Create text objects with validation
+			const roundScore = await this.createText(
+				`ROUND SCORE: ${gameState.score}`,
 				{
-					fontFamily: 'Press Start 2P',
-					fontSize: baseFontSize * 0.5,
-					fill: 0xffffff,
+					fontFamily: this.defaultTextStyle.fontFamily,
+					fontSize: baseFontSize * 0.8,
+					fill: 0x004643,
 					align: 'center',
+					padding: 4,
 				}
 			)
-			totalScoreText.anchor.set(0.5)
-			scoreGroup.addChild(totalScoreText)
-			scoreGroup.y = baseFontSize * 6.0
-			textContainer.addChild(scoreGroup)
+
+			if (roundScore) {
+				roundScore.anchor.set(0.5)
+				roundScore.y = 0
+				gameOverContainer.addChild(roundScore)
+			}
+
+			const totalScore = await this.createText(
+				`TOTAL SCORE: ${gameState.totalScore}`,
+				{
+					fontFamily: this.defaultTextStyle.fontFamily,
+					fontSize: baseFontSize * 0.8,
+					fill: 0x004643,
+					align: 'center',
+					padding: 4,
+				}
+			)
+
+			if (totalScore) {
+				totalScore.anchor.set(0.5)
+				totalScore.y = baseFontSize * 1.2
+				gameOverContainer.addChild(totalScore)
+			}
+
+			// Show rounds left or game complete message
+			const roundsMessage =
+				gameState.roundsLeft > 0
+					? `${gameState.roundsLeft} ROUNDS LEFT`
+					: 'GAME COMPLETE!'
+
+			const roundsText = await this.createText(roundsMessage, {
+				fontFamily: this.defaultTextStyle.fontFamily,
+				fontSize: baseFontSize * 0.6,
+				fill: 0x004643,
+				align: 'center',
+				padding: 4,
+			})
+
+			if (roundsText) {
+				roundsText.anchor.set(0.5)
+				roundsText.y = baseFontSize * 2.4
+				gameOverContainer.addChild(roundsText)
+			}
+
+			// Add continue message with blink effect
+			const continueText = await this.createText(
+				gameState.roundsLeft > 0 ? 'TAP TO CONTINUE' : 'TAP TO RESTART',
+				{
+					fontFamily: this.defaultTextStyle.fontFamily,
+					fontSize: baseFontSize * 0.5,
+					fill: 0x004643,
+					align: 'center',
+					padding: 4,
+				}
+			)
+
+			if (continueText) {
+				continueText.anchor.set(0.5)
+				continueText.y = baseFontSize * 3.6
+
+				// Add blink effect
+				let visible = true
+				const blinkInterval = setInterval(() => {
+					visible = !visible
+					continueText.visible = visible
+				}, 500)
+
+				// Store interval for cleanup
+				continueText._blinkInterval = blinkInterval
+				gameOverContainer.addChild(continueText)
+			}
+
+			// Position and scale container
+			gameOverContainer.x = width / 2
+			gameOverContainer.y = height * 0.25
+
+			// Get bounds of content
+			const bounds = gameOverContainer.getBounds()
+			if (bounds && isFinite(bounds.width) && isFinite(bounds.height)) {
+				// Scale if needed
+				const scale = Math.min(
+					maxWidth / bounds.width,
+					maxHeight / bounds.height,
+					1
+				)
+				if (scale < 1) {
+					gameOverContainer.scale.set(scale)
+				}
+			}
+
+			// Add to HUD
+			this.hud.addChild(gameOverContainer)
+
+			// Draw copyright
+			await this.drawCopyright()
+
+			// Force a render update
+			this.app.renderer.render(this.app.stage)
+		} catch (error) {
+			console.error('Error drawing game over screen:', error)
+			this.showErrorScreen('Error drawing game over screen: ' + error.message)
 		}
-
-		// Position and scale text container
-		textContainer.x = width / 2
-		textContainer.y = height * 0.25
-
-		// Get bounds of text content only
-		const bounds = textContainer.getBounds()
-
-		// Only constrain by height, allow width to extend
-		const scale = Math.min(
-			maxHeight / bounds.height,
-			1 // Never scale up
-		)
-
-		// Apply scale to text container if needed
-		if (scale < 1) {
-			textContainer.scale.set(scale)
-		}
-
-		// Add containers to HUD
-		this.hud.addChild(textContainer)
-		this.drawCopyright()
 	}
 
-	drawGameOverScreen() {
-		const width = this.app.screen.width
-		const height = this.app.screen.height
-		const maxWidth = width * 0.9
-		const maxHeight = height * 0.9
-		const baseFontSize = Math.min(height / 10, width / 12)
-
-		// Hide gloves and player during game over screen
-		if (this.gloves) {
-			this.gloves.visible = false
+	clearGameOverScreen() {
+		// Remove all existing HUD children with proper cleanup
+		while (this.hud.children.length > 0) {
+			const child = this.hud.children[0]
+			if (child._blinkTicker) {
+				child._blinkTicker.stop()
+				child._blinkTicker.destroy()
+				child._blinkTicker = null
+			}
+			if (child._moveHandler) {
+				this.app.ticker.remove(child._moveHandler)
+				child._moveHandler = null
+			}
+			if (child instanceof PIXI.Text) {
+				child.destroy(true)
+			} else if (child instanceof PIXI.Container) {
+				// Recursively destroy container contents
+				this.destroyContainer(child)
+			} else {
+				child.destroy({ children: true, texture: true, baseTexture: true })
+			}
+			this.hud.removeChild(child)
 		}
-		if (this.cheeks) {
-			this.cheeks.visible = false
+
+		// Force garbage collection
+		this.app.renderer.textureGC.run()
+		this.app.renderer.batch.reset()
+	}
+
+	destroyContainer(container) {
+		while (container.children.length > 0) {
+			const child = container.children[0]
+			if (child instanceof PIXI.Text) {
+				child.destroy(true)
+			} else if (child instanceof PIXI.Container) {
+				this.destroyContainer(child)
+			} else {
+				child.destroy({ children: true, texture: true, baseTexture: true })
+			}
+			container.removeChild(child)
 		}
+		container.destroy({ children: true })
+	}
 
-		// Create main container for all content
-		const mainContainer = new PIXI.Container()
-		mainContainer.x = width / 2
-		mainContainer.y = height * 0.3
+	async drawFinalKnockout(mainContainer, baseFontSize) {
+		const knockout = await this.createText('KNOCKOUT!!', {
+			fontFamily: 'Press Start 2P',
+			fontSize: baseFontSize,
+			fill: 0x00005c,
+			align: 'center',
+		})
 
-		if (gameState.roundsLeft === 0) {
-			// Final game over screen
-			const knockout = new PIXI.Text('KNOCKOUT!!', {
-				fontFamily: 'Press Start 2P',
-				fontSize: baseFontSize,
-				fill: 0x00005c,
-				align: 'center',
-			})
+		if (knockout) {
 			knockout.anchor.set(0.5)
 			knockout.y = 0
+			mainContainer.addChild(knockout)
+		}
 
-			const finalScore = gameState.totalScore + gameState.score
-			const scoreText = `FINAL SCORE: ${finalScore}`
-			const scoreContainer = new PIXI.Graphics()
-			const scoreTextObj = new PIXI.Text(scoreText, {
-				fontFamily: 'Press Start 2P',
-				fontSize: baseFontSize * 0.8,
-				fill: 0x000000,
-				align: 'center',
-			})
+		const finalScore = gameState.totalScore + gameState.score
+		const scoreText = `FINAL SCORE: ${finalScore}`
+		const scoreContainer = new PIXI.Graphics()
+		const scoreTextObj = await this.createText(scoreText, {
+			fontFamily: 'Press Start 2P',
+			fontSize: baseFontSize * 0.8,
+			fill: 0x000000,
+			align: 'center',
+		})
+
+		if (scoreTextObj) {
 			scoreTextObj.anchor.set(0.5)
 			scoreTextObj.y = baseFontSize * 1.5
 
@@ -918,107 +1001,121 @@ class Game {
 				scoreTextObj.height + padding
 			)
 
-			mainContainer.addChild(scoreContainer, knockout, scoreTextObj)
-		} else {
-			// Round over screen
-			const roundOver1 = new PIXI.Text('ROUND', {
-				fontFamily: 'Press Start 2P',
-				fontSize: baseFontSize,
-				fill: 0x00005c,
-				align: 'center',
-			})
+			mainContainer.addChild(scoreContainer, scoreTextObj)
+		}
+	}
+
+	async drawRoundOver(mainContainer, baseFontSize) {
+		const roundOver1 = await this.createText('ROUND', {
+			fontFamily: 'Press Start 2P',
+			fontSize: baseFontSize,
+			fill: 0x00005c,
+			align: 'center',
+		})
+
+		if (roundOver1) {
 			roundOver1.anchor.set(0.5)
 			roundOver1.y = 0
+			mainContainer.addChild(roundOver1)
+		}
 
-			const roundOver2 = new PIXI.Text('OVER!!', {
-				fontFamily: 'Press Start 2P',
-				fontSize: baseFontSize,
-				fill: 0x00005c,
-				align: 'center',
-			})
+		const roundOver2 = await this.createText('OVER!!', {
+			fontFamily: 'Press Start 2P',
+			fontSize: baseFontSize,
+			fill: 0x00005c,
+			align: 'center',
+		})
+
+		if (roundOver2) {
 			roundOver2.anchor.set(0.5)
 			roundOver2.y = baseFontSize * 1.2
+			mainContainer.addChild(roundOver2)
+		}
 
-			const roundScore = new PIXI.Text(`ROUND SCORE: ${gameState.score}`, {
+		const roundScore = await this.createText(
+			`ROUND SCORE: ${gameState.score}`,
+			{
 				fontFamily: 'Press Start 2P',
 				fontSize: baseFontSize * 0.6,
 				fill: 0x004643,
 				align: 'center',
-			})
+			}
+		)
+
+		if (roundScore) {
 			roundScore.anchor.set(0.5)
 			roundScore.y = baseFontSize * 2.4
+			mainContainer.addChild(roundScore)
+		}
 
-			const totalScoreText = new PIXI.Text(
-				`TOTAL SCORE: ${gameState.totalScore + gameState.score}`,
-				{
-					fontFamily: 'Press Start 2P',
-					fontSize: baseFontSize * 0.6,
-					fill: 0x004643,
-					align: 'center',
-				}
-			)
+		const totalScoreText = await this.createText(
+			`TOTAL SCORE: ${gameState.totalScore + gameState.score}`,
+			{
+				fontFamily: 'Press Start 2P',
+				fontSize: baseFontSize * 0.6,
+				fill: 0x004643,
+				align: 'center',
+			}
+		)
+
+		if (totalScoreText) {
 			totalScoreText.anchor.set(0.5)
 			totalScoreText.y = baseFontSize * 3.2
+			mainContainer.addChild(totalScoreText)
+		}
 
-			const roundsLeftText = new PIXI.Text(
-				`ROUNDS LEFT: ${gameState.roundsLeft}`,
-				{
-					fontFamily: 'Press Start 2P',
-					fontSize: baseFontSize * 0.6,
-					fill: 0x004643,
-					align: 'center',
-				}
-			)
+		const roundsLeftText = await this.createText(
+			`ROUNDS LEFT: ${gameState.roundsLeft}`,
+			{
+				fontFamily: 'Press Start 2P',
+				fontSize: baseFontSize * 0.6,
+				fill: 0x004643,
+				align: 'center',
+			}
+		)
+
+		if (roundsLeftText) {
 			roundsLeftText.anchor.set(0.5)
 			roundsLeftText.y = baseFontSize * 4.0
-
-			mainContainer.addChild(
-				roundOver1,
-				roundOver2,
-				roundScore,
-				totalScoreText,
-				roundsLeftText
-			)
-
-			// Press space (after delay)
-			if (performance.now() - gameState.knockoutTime > KNOCKOUT_DELAY) {
-				// Check if mobile device
-				const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-				const buttonText = isMobile ? 'TAP SCREEN' : 'PRESS SPACE'
-
-				const pressSpace = new PIXI.Text(buttonText, {
-					fontFamily: 'Press Start 2P',
-					fontSize: baseFontSize * 0.6,
-					fill: 0xff0000,
-					align: 'center',
-				})
-				pressSpace.anchor.set(0.5)
-				pressSpace.y = baseFontSize * 5.2
-
-				// Blinking effect with color alternation
-				this.app.ticker.add(() => {
-					const time = performance.now()
-					pressSpace.style.fill =
-						Math.floor(time / 250) % 2 ? 0xff0000 : 0xffffff
-				})
-
-				mainContainer.addChild(pressSpace)
-			}
+			mainContainer.addChild(roundsLeftText)
 		}
 
-		// Scale container if needed
-		const bounds = mainContainer.getBounds()
-		const scale = Math.min(
-			maxWidth / bounds.width,
-			maxHeight / bounds.height,
-			1 // Never scale up
-		)
-		if (scale < 1) {
-			mainContainer.scale.set(scale)
-		}
+		// Check if mobile device
+		const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+		const buttonText = isMobile ? 'TAP SCREEN' : 'PRESS SPACE'
 
-		this.hud.addChild(mainContainer)
-		this.drawCopyright()
+		const pressSpace = await this.createText(buttonText, {
+			fontFamily: 'Press Start 2P',
+			fontSize: baseFontSize * 0.6,
+			fill: 0xff0000,
+			align: 'center',
+		})
+
+		if (pressSpace) {
+			pressSpace.anchor.set(0.5)
+			pressSpace.y = baseFontSize * 5.2
+
+			// Set initial visibility based on knockout delay
+			pressSpace.alpha =
+				performance.now() - gameState.knockoutTime > KNOCKOUT_DELAY ? 1 : 0
+
+			// Create new blink ticker with cleanup
+			this._blinkTicker = new PIXI.Ticker()
+			this._blinkTicker.add(() => {
+				const time = performance.now()
+				if (time - gameState.knockoutTime > KNOCKOUT_DELAY) {
+					pressSpace.alpha = 1
+					// Match title screen blink rate of 250ms
+					const step = Math.floor(time / 250) % 2
+					pressSpace.style.fill = step ? 0xff0000 : 0xffffff
+				} else {
+					pressSpace.alpha = 0
+				}
+			})
+			this._blinkTicker.start()
+
+			mainContainer.addChild(pressSpace)
+		}
 	}
 
 	addDecorativeGloves(pressSpaceGroup, menuSize) {
@@ -1029,7 +1126,7 @@ class Game {
 
 			// Fixed spacing based on menu size rather than text width
 			const gloveSize = menuSize * 2.5
-			const gloveSpacing = menuSize * 12 // Fixed spacing relative to menu size
+			const gloveSpacing = menuSize * 12
 
 			// Left glove
 			const leftGlove = new PIXI.Sprite(armTexture)
@@ -1052,24 +1149,31 @@ class Game {
 
 			pressSpaceGroup.addChild(leftGlove, rightGlove)
 
-			// Retro-style stepped movement
+			// Retro-style stepped movement with optimized handler
 			const moveHandler = () => {
+				if (this.isIdle) return // Skip animation in idle state
+
 				const time = performance.now()
-				// Use step function instead of sine for retro feel
 				const step = Math.floor(time / 250) % 2
 				const moveAmount = step ? BASE_UNIT * 0.8 : 0
-				leftGlove.x = -gloveSpacing / 2 - moveAmount
-				rightGlove.x = gloveSpacing / 2 + moveAmount
+
+				// Only update if position changed
+				if (leftGlove.x !== -gloveSpacing / 2 - moveAmount) {
+					leftGlove.x = -gloveSpacing / 2 - moveAmount
+					rightGlove.x = gloveSpacing / 2 + moveAmount
+				}
 			}
+
 			this.app.ticker.add(moveHandler)
 			leftGlove._moveHandler = moveHandler
 
-			// Force another render to ensure gloves are visible
-			this.app.renderer.render(this.app.stage)
+			// Store initial positions for reset
+			leftGlove._baseX = -gloveSpacing / 2
+			rightGlove._baseX = gloveSpacing / 2
 		}
 	}
 
-	drawGameHUD() {
+	async drawGameHUD() {
 		const width = this.app.screen.width
 		const height = this.app.screen.height
 		const fontSize = Math.min(width / 40, height / 20)
@@ -1181,6 +1285,14 @@ class Game {
 	}
 
 	handleInput() {
+		// Update last interaction time
+		this.lastInteractionTime = performance.now()
+
+		// Exit idle state if needed
+		if (this.isIdle) {
+			this.exitIdleState()
+		}
+
 		// Don't allow game input if we're in Konami sequence
 		if (
 			window.konamiState &&
@@ -1198,52 +1310,49 @@ class Game {
 			cheeksVisible: this.cheeks?.visible,
 			glovesVisible: this.gloves?.visible,
 			gameState: { ...gameState },
-			cheeksInitialized: !!this.cheeks,
-			glovesInitialized: !!this.gloves,
-			gameLayerChildren: this.gameLayer?.children?.length,
 		})
 
 		if (!gameState.gameStarted) {
-			if (gameState.roundsLeft > 0) {
-				console.log('Starting game...')
-				gameState.gameStarted = true
-				gameState.gameStartTime = performance.now()
-				playCheerSound()
-				this.startGame()
-				this.updateHUD()
-			}
+			console.log('Starting game...')
+			gameState.gameStarted = true
+			gameState.gameStartTime = performance.now()
+			gameState.roundsLeft = 3
+			gameState.currentRound = 1
+			this.playCheerSound()
+			this.startGame()
+			this.updateHUD()
 		} else if (
 			gameState.gameOver &&
 			performance.now() - gameState.knockoutTime > KNOCKOUT_DELAY
 		) {
 			if (gameState.roundsLeft > 0) {
-				console.log('Starting next round with state:', {
-					totalScore: gameState.totalScore,
-					currentRound: gameState.currentRound,
-					cheeksVisible: this.cheeks?.visible,
-					glovesVisible: this.gloves?.visible,
-				})
+				console.log('Starting next round...')
 				gameState.totalScore += gameState.score
 				gameState.currentRound++
-				this.startGame()
 				gameState.gameStarted = true
 				gameState.gameOver = false
 				gameState.firstAction = false
 				gameState.gameStartTime = performance.now()
-				console.log('After starting next round:', {
-					cheeksVisible: this.cheeks?.visible,
-					glovesVisible: this.gloves?.visible,
-				})
-				playCheerSound()
+				this.startGame()
+				this.playCheerSound()
+			} else {
+				console.log('Game complete, resetting...')
+				gameState.gameStarted = false
+				gameState.gameOver = false
+				gameState.score = 0
+				gameState.totalScore = 0
+				gameState.roundsLeft = 3
+				gameState.currentRound = 1
+				this.updateHUD()
 			}
 		} else if (!gameState.gameOver) {
-			if (this.cheeks) {
+			if (this.cheeks && this.cheeks.visible) {
 				console.log('Flapping cheeks...')
 				gameState.firstAction = true
 				gameState.hasEverActed = true
 				this.cheeks.velocity = CLAP_SPEED
 				gameState.squishStartTime = performance.now()
-				playFlapSound()
+				this.playFlapSound()
 			}
 		}
 	}
@@ -1258,15 +1367,28 @@ class Game {
 			initialGlovesVisible: this.gloves?.visible,
 		})
 
+		// Clear existing game state
 		gameState.score = 0
 		gameState.gameSpeed = 1
 		gameState.lastSpeedIncreaseScore = 0
 		gameState.firstAction = false
 		window.shareData = null
 
+		// Clear HUD and title screen
+		this.hud.removeChildren()
+
+		// Clean up any existing game objects
+		this.cleanupGameObjects()
+
+		// Create game background with ring and crowd
+		this.createBackground()
+
+		// Initialize game HUD
+		this.updateHUD()
+
 		if (this.cheeks) {
 			console.log('Setting cheeks visibility to true')
-			this.cheeks.visible = true // Show cheeks when game starts
+			this.cheeks.visible = true
 			this.cheeks.x = this.app.screen.width * PLAYER_X
 			this.cheeks.y = this.app.screen.height / 2
 			this.cheeks.velocity = 0
@@ -1281,11 +1403,20 @@ class Game {
 
 		if (this.gloves) {
 			console.log('Setting gloves visibility to true')
-			this.gloves.visible = true // Show gloves when game starts
-			// Clear existing glove pairs
-			this.gloves.pairs.forEach((pair) => {
-				this.gloves.removeChild(pair)
-			})
+			this.gloves.visible = true
+			// Clear existing glove pairs safely
+			while (this.gloves.pairs.length > 0) {
+				const pair = this.gloves.pairs.pop()
+				if (pair) {
+					pair.children.forEach((glove) => {
+						if (glove.texture) {
+							glove.texture = null
+						}
+					})
+					pair.destroy({ children: true })
+				}
+			}
+			this.gloves.removeChildren()
 			this.gloves.pairs = []
 			this.spawnGloves()
 			console.log('Gloves state:', {
@@ -1296,18 +1427,55 @@ class Game {
 			console.warn('Gloves object not initialized')
 		}
 
+		// Force a render update to ensure visibility changes take effect
+		this.app.renderer.render(this.app.stage)
+
 		console.log('End of startGame:', {
 			cheeksVisible: this.cheeks?.visible,
 			glovesVisible: this.gloves?.visible,
 		})
-
-		this.updateHUD()
 	}
 
-	spawnGloves() {
+	cleanupGameObjects() {
+		// Clean up gloves without destroying textures
+		if (this.gloves) {
+			this.gloves.pairs.forEach((pair) => {
+				if (pair) {
+					pair.children.forEach((glove) => {
+						if (glove instanceof PIXI.Sprite) {
+							// Just clear the reference, don't destroy the texture
+							glove.texture = null
+						}
+					})
+					pair.destroy({ children: true, texture: false, baseTexture: false })
+				}
+			})
+			this.gloves.pairs = []
+			this.gloves.removeChildren()
+		}
+
+		// Reset cheeks
+		if (this.cheeks) {
+			this.cheeks.velocity = 0
+			this.cheeks.visible = true
+			const targetSize = CHEEKS_SIZE
+			const cheeksTexture = PIXI.Assets.get('cheeks')
+			if (cheeksTexture && cheeksTexture.valid) {
+				const baseScale =
+					targetSize / Math.max(cheeksTexture.width, cheeksTexture.height)
+				this.cheeks.scale.set(baseScale)
+			}
+		}
+
+		// Force a cleanup but preserve essential textures
+		this.app.renderer.textureGC.run()
+		this.app.renderer.batch.reset()
+	}
+
+	async spawnGloves() {
 		const width = this.screenWidth
 		const height = this.screenHeight
-		const safePadding = height * 0.05 // 5% of screen height
+		const safePadding = height * 0.05
 
 		// Randomize the gap size relative to screen height
 		GLOVE_OPENING = MIN_GAP + Math.random() * (MAX_GAP - MIN_GAP)
@@ -1317,11 +1485,10 @@ class Game {
 		const maxY = height * 0.7
 		let gapCenter = minY + Math.random() * (maxY - minY)
 
-		// Create glove pair container - spawn well off screen
+		// Create glove pair container
 		const pair = new PIXI.Container()
 
-		// If this is the first pair, spawn at initial position
-		// Otherwise, spawn relative to the last pair's position
+		// Position the pair
 		if (this.gloves.pairs.length === 0) {
 			pair.x = width * SPAWN_OFFSET
 		} else {
@@ -1332,38 +1499,14 @@ class Game {
 		pair.gapY = gapCenter
 		pair.passed = false
 
-		// Create gloves
-		const armTexture = PIXI.Assets.get('arm')
-		if (armTexture) {
-			// Calculate dimensions based on screen height
-			const targetWidth = ARM_SCALE
-			const naturalRatio = armTexture.height / armTexture.width
-			const armHeight = targetWidth * naturalRatio
+		// Get cached arm texture
+		let armTexture = PIXI.Assets.get('arm')
 
-			// Top glove - pinned to top of screen
-			const topGlove = new PIXI.Sprite(armTexture)
-			topGlove.anchor.set(0.5, 0) // Anchor at top center
-			topGlove.x = 0
-			topGlove.y = 0
-			topGlove.angle = 180
-			topGlove.width = targetWidth
-			topGlove.scale.y = topGlove.scale.x
-			topGlove.position.y = gapCenter - GLOVE_OPENING / 2
+		// If no valid texture, create fallback shapes
+		if (!armTexture || !armTexture.valid) {
+			console.warn('Using fallback shapes for gloves')
+			const armHeight = ARM_SCALE * 4
 
-			// Bottom glove - pinned to bottom of screen
-			const bottomGlove = new PIXI.Sprite(armTexture)
-			bottomGlove.anchor.set(0.5, 0) // Anchor at top center
-			bottomGlove.x = 0
-			bottomGlove.y = gapCenter + GLOVE_OPENING / 2
-			bottomGlove.width = targetWidth
-			bottomGlove.scale.y = bottomGlove.scale.x
-
-			pair.addChild(topGlove, bottomGlove)
-		} else {
-			// For fallback shapes, use standard ratio
-			const armHeight = ARM_SCALE * ARM_HEIGHT_RATIO
-
-			// Create fallback shape-based gloves
 			const topGlove = new PIXI.Graphics()
 			topGlove.beginFill(0xff0000)
 			topGlove.drawRect(-ARM_SCALE / 2, 0, ARM_SCALE, armHeight)
@@ -1377,10 +1520,47 @@ class Game {
 			bottomGlove.y = gapCenter + GLOVE_OPENING / 2
 
 			pair.addChild(topGlove, bottomGlove)
+		} else {
+			// Calculate dimensions
+			const targetWidth = ARM_SCALE
+			const naturalRatio = armTexture.height / armTexture.width
+			const armHeight = targetWidth * naturalRatio
+
+			// Create top glove
+			const topGlove = new PIXI.Sprite(armTexture)
+			topGlove.anchor.set(0.5, 0)
+			topGlove.x = 0
+			topGlove.y = 0
+			topGlove.angle = 180
+			topGlove.width = targetWidth
+			topGlove.scale.y = topGlove.scale.x
+			topGlove.position.y = gapCenter - GLOVE_OPENING / 2
+
+			// Create bottom glove
+			const bottomGlove = new PIXI.Sprite(armTexture)
+			bottomGlove.anchor.set(0.5, 0)
+			bottomGlove.x = 0
+			bottomGlove.y = gapCenter + GLOVE_OPENING / 2
+			bottomGlove.width = targetWidth
+			bottomGlove.scale.y = bottomGlove.scale.x
+
+			pair.addChild(topGlove, bottomGlove)
 		}
+
+		// Enable culling for the pair
+		pair.cullable = true
 
 		this.gloves.pairs.push(pair)
 		this.gloves.addChild(pair)
+
+		// Clean up old pairs
+		this.gloves.pairs = this.gloves.pairs.filter((p) => {
+			if (p.x + ARM_SCALE < 0) {
+				p.destroy({ children: true })
+				return false
+			}
+			return true
+		})
 	}
 
 	gameLoop(delta) {
@@ -1393,165 +1573,249 @@ class Game {
 			this.crtFilter.seed = Math.random()
 		}
 
-		// Update screen constants to ensure proper scaling
-		this.updateScreenConstants()
-
+		// Only update game state if game is started and not over
 		if (gameState.gameStarted && !gameState.gameOver) {
-			if (this.cheeks) {
-				// Calculate new velocity
-				let newVelocity =
-					this.cheeks.velocity + GRAVITY * gameState.gameSpeed * delta
-				newVelocity = Math.max(-8, Math.min(8, newVelocity))
-				this.cheeks.velocity = newVelocity
+			this.updateGameState(delta)
+		}
 
-				// Update position
-				this.cheeks.y += this.cheeks.velocity * gameState.gameSpeed * delta
+		// Force a render update
+		this.app.renderer.render(this.app.stage)
+	}
 
-				// Handle squish effect
-				if (gameState.squishStartTime > 0) {
-					const elapsed = performance.now() - gameState.squishStartTime
-					if (elapsed < SQUISH_DURATION) {
-						const progress = elapsed / SQUISH_DURATION
-						const xScale = 1 - 0.3 * Math.sin(progress * Math.PI)
-						const yScale = 1 + (1 - xScale) * 0.5
-						// Use CHEEKS_SIZE for scaling
-						const targetSize = CHEEKS_SIZE
-						const cheeksTexture = PIXI.Assets.get('cheeks')
-						const baseScale = cheeksTexture
-							? targetSize / Math.max(cheeksTexture.width, cheeksTexture.height)
-							: 1
-						this.cheeks.scale.x = xScale * baseScale
-						this.cheeks.scale.y = yScale * baseScale
-					} else {
-						gameState.squishStartTime = 0
-						// Reset to normal scale
-						const targetSize = CHEEKS_SIZE
-						const cheeksTexture = PIXI.Assets.get('cheeks')
-						const baseScale = cheeksTexture
-							? targetSize / Math.max(cheeksTexture.width, cheeksTexture.height)
-							: 1
-						this.cheeks.scale.set(baseScale)
-					}
+	updateGameState(delta) {
+		if (this.cheeks) {
+			// Calculate new velocity
+			let newVelocity =
+				this.cheeks.velocity + GRAVITY * gameState.gameSpeed * delta
+			newVelocity = Math.max(-8, Math.min(8, newVelocity))
+			this.cheeks.velocity = newVelocity
+
+			// Update position
+			this.cheeks.y += this.cheeks.velocity * gameState.gameSpeed * delta
+
+			// Handle squish effect
+			if (gameState.squishStartTime > 0) {
+				const elapsed = performance.now() - gameState.squishStartTime
+				if (elapsed < SQUISH_DURATION) {
+					const progress = elapsed / SQUISH_DURATION
+					const xScale = 1 - 0.3 * Math.sin(progress * Math.PI)
+					const yScale = 1 + (1 - xScale) * 0.5
+					const targetSize = CHEEKS_SIZE
+					const cheeksTexture = PIXI.Assets.get('cheeks')
+					const baseScale = cheeksTexture
+						? targetSize / Math.max(cheeksTexture.width, cheeksTexture.height)
+						: 1
+					this.cheeks.scale.x = xScale * baseScale
+					this.cheeks.scale.y = yScale * baseScale
+				} else {
+					gameState.squishStartTime = 0
+					const targetSize = CHEEKS_SIZE
+					const cheeksTexture = PIXI.Assets.get('cheeks')
+					const baseScale = cheeksTexture
+						? targetSize / Math.max(cheeksTexture.width, cheeksTexture.height)
+						: 1
+					this.cheeks.scale.set(baseScale)
 				}
-			}
-
-			// Update gloves
-			if (
-				this.gloves &&
-				performance.now() - gameState.gameStartTime >= gameState.gameStartDelay
-			) {
-				const speed =
-					GLOVE_SPEED * gameState.gameSpeed * delta * (this.screenWidth / 1000)
-
-				// Move existing gloves
-				this.gloves.pairs.forEach((pair) => {
-					pair.x -= speed
-				})
-
-				// Remove off-screen gloves
-				for (let i = this.gloves.pairs.length - 1; i >= 0; i--) {
-					const pair = this.gloves.pairs[i]
-					if (pair.x + ARM_SCALE <= 0) {
-						// Use ARM_SCALE instead of GLOVE_WIDTH
-						this.gloves.removeChild(pair)
-						this.gloves.pairs.splice(i, 1)
-					}
-				}
-
-				// Spawn new gloves if needed
-				const lastPair = this.gloves.pairs[this.gloves.pairs.length - 1]
-				if (!lastPair || lastPair.x <= this.screenWidth * SPAWN_OFFSET) {
-					this.spawnGloves()
-				}
-			}
-
-			// Check for collisions and bounds
-			if (this.checkCollisions() || this.checkBounds()) {
-				gameState.gameOver = true
-				gameState.knockoutTime = performance.now()
-				gameState.roundsLeft--
-				this.updateHUD()
 			}
 		}
 
-		// Force HUD update every frame to ensure UI stays in sync
-		this.updateHUD()
+		// Update gloves
+		if (
+			this.gloves &&
+			performance.now() - gameState.gameStartTime >= gameState.gameStartDelay
+		) {
+			this.updateGloves(delta)
+		}
+
+		// Check for collisions and bounds
+		if (this.checkCollisions() || this.checkBounds()) {
+			gameState.gameOver = true
+			gameState.knockoutTime = performance.now()
+			gameState.roundsLeft--
+			this.updateHUD()
+		}
 	}
 
 	checkCollisions() {
-		if (!this.cheeks || !this.gloves) return false
-
-		// Use CHEEKS_SIZE for collision box
-		const cheeksBox = {
-			x: this.cheeks.x - CHEEKS_SIZE * 0.4, // 80% of cheeks size for hit box
-			y: this.cheeks.y - CHEEKS_SIZE * 0.4,
-			width: CHEEKS_SIZE * 0.8,
-			height: CHEEKS_SIZE * 0.8,
+		// Early exit if game objects aren't ready
+		if (
+			!this.cheeks ||
+			!this.gloves ||
+			!this.cheeks.visible ||
+			!this.gloves.visible
+		) {
+			return false
 		}
 
-		for (const pair of this.gloves.pairs) {
-			// Get the actual sprite dimensions and positions from the container
-			const topGlove = pair.children[0]
-			const bottomGlove = pair.children[1]
-
-			// Get the global positions of the gloves
-			const topBounds = topGlove.getBounds()
-			const bottomBounds = bottomGlove.getBounds()
-
-			// Create slightly smaller collision boxes for gloves (90% of sprite size)
-			const shrinkFactor = 0.9
-			const topCollision = {
-				x: topBounds.x + (topBounds.width * (1 - shrinkFactor)) / 2,
-				y: topBounds.y + (topBounds.height * (1 - shrinkFactor)) / 2,
-				width: topBounds.width * shrinkFactor,
-				height: topBounds.height * shrinkFactor,
+		try {
+			// Cache texture references
+			const armTexture = PIXI.Assets.get('arm')
+			if (!armTexture || !armTexture.valid) {
+				console.warn('Arm texture invalid, attempting to reload')
+				return false
 			}
 
-			const bottomCollision = {
-				x: bottomBounds.x + (bottomBounds.width * (1 - shrinkFactor)) / 2,
-				y: bottomBounds.y + (bottomBounds.height * (1 - shrinkFactor)) / 2,
-				width: bottomBounds.width * shrinkFactor,
-				height: bottomBounds.height * shrinkFactor,
+			// Use CHEEKS_SIZE for collision box with additional validation
+			const cheeksBox = {
+				x: this.cheeks.x - CHEEKS_SIZE * 0.4,
+				y: this.cheeks.y - CHEEKS_SIZE * 0.4,
+				width: CHEEKS_SIZE * 0.8,
+				height: CHEEKS_SIZE * 0.8,
 			}
 
-			if (
-				this.intersectRect(cheeksBox, topCollision) ||
-				this.intersectRect(cheeksBox, bottomCollision)
-			) {
-				playKnockoutSound()
-				window.shareData = null
-				return true
+			// Validate cheeks collision box
+			if (!this.isValidCollisionBox(cheeksBox)) {
+				console.warn('Invalid cheeks collision box')
+				return false
 			}
 
-			if (!pair.passed && this.cheeks.x > pair.x) {
-				pair.passed = true
-				gameState.score += window.cheatPoints || 1
+			// Create a copy of pairs array to prevent modification during iteration
+			const currentPairs = [...this.gloves.pairs]
 
-				if (
-					gameState.score % 1 === 0 &&
-					gameState.gameSpeed < MAX_SPEED &&
-					!window.cheatMode
-				) {
-					gameState.gameSpeed = Math.min(
-						MAX_SPEED,
-						gameState.gameSpeed + SPEED_INCREASE
-					)
-					console.log('Speed increased to:', gameState.gameSpeed)
+			for (const pair of currentPairs) {
+				// Skip invalid pairs
+				if (!pair || !pair.children || pair.children.length < 2) {
+					continue
 				}
 
-				this.updateHUD()
+				const topGlove = pair.children[0]
+				const bottomGlove = pair.children[1]
+
+				// Skip if gloves are invalid
+				if (!topGlove || !bottomGlove) {
+					continue
+				}
+
+				try {
+					// For sprites, ensure textures are valid
+					if (topGlove instanceof PIXI.Sprite) {
+						if (!topGlove.texture || !topGlove.texture.valid) {
+							topGlove.texture = armTexture
+						}
+					}
+					if (bottomGlove instanceof PIXI.Sprite) {
+						if (!bottomGlove.texture || !bottomGlove.texture.valid) {
+							bottomGlove.texture = armTexture
+						}
+					}
+
+					// Get bounds safely with validation
+					const topBounds = this.getSafeBounds(topGlove)
+					const bottomBounds = this.getSafeBounds(bottomGlove)
+
+					if (!topBounds || !bottomBounds) {
+						continue
+					}
+
+					// Create collision boxes with validation
+					const topCollision = this.createCollisionBox(topBounds, 0.9)
+					const bottomCollision = this.createCollisionBox(bottomBounds, 0.9)
+
+					if (!topCollision || !bottomCollision) {
+						continue
+					}
+
+					// Check for collisions
+					if (
+						this.intersectRect(cheeksBox, topCollision) ||
+						this.intersectRect(cheeksBox, bottomCollision)
+					) {
+						this.playKnockoutSound()
+						window.shareData = null
+						return true
+					}
+
+					// Score points for passing gloves
+					if (!pair.passed && this.cheeks.x > pair.x) {
+						pair.passed = true
+						gameState.score += window.cheatPoints || 1
+
+						// Update game speed
+						if (
+							gameState.score % 1 === 0 &&
+							gameState.gameSpeed < MAX_SPEED &&
+							!window.cheatMode
+						) {
+							gameState.gameSpeed = Math.min(
+								MAX_SPEED,
+								gameState.gameSpeed + SPEED_INCREASE
+							)
+						}
+					}
+				} catch (error) {
+					console.warn('Error processing glove pair:', error)
+					continue
+				}
 			}
+		} catch (error) {
+			console.error('Collision check error:', error)
+			return false
 		}
 
 		return false
 	}
 
-	intersectRect(r1, r2) {
-		return !(
-			r2.x > r1.x + r1.width ||
-			r2.x + r2.width < r1.x ||
-			r2.y > r1.y + r1.height ||
-			r2.y + r2.height < r1.y
+	getSafeBounds(displayObject) {
+		try {
+			if (!displayObject || !displayObject.getBounds) {
+				return null
+			}
+
+			// For sprites, validate texture before getting bounds
+			if (displayObject instanceof PIXI.Sprite) {
+				if (!displayObject.texture || !displayObject.texture.valid) {
+					return null
+				}
+			}
+
+			const bounds = displayObject.getBounds()
+			if (
+				!bounds ||
+				!isFinite(bounds.width) ||
+				!isFinite(bounds.height) ||
+				bounds.width <= 0 ||
+				bounds.height <= 0
+			) {
+				return null
+			}
+			return bounds
+		} catch (error) {
+			console.warn('Error getting bounds:', error)
+			return null
+		}
+	}
+
+	createCollisionBox(bounds, shrinkFactor) {
+		if (!bounds) return null
+
+		try {
+			const box = {
+				x: bounds.x + (bounds.width * (1 - shrinkFactor)) / 2,
+				y: bounds.y + (bounds.height * (1 - shrinkFactor)) / 2,
+				width: bounds.width * shrinkFactor,
+				height: bounds.height * shrinkFactor,
+			}
+
+			return this.isValidCollisionBox(box) ? box : null
+		} catch (error) {
+			console.warn('Error creating collision box:', error)
+			return null
+		}
+	}
+
+	isValidCollisionBox(box) {
+		return (
+			box &&
+			typeof box.x === 'number' &&
+			isFinite(box.x) &&
+			typeof box.y === 'number' &&
+			isFinite(box.y) &&
+			typeof box.width === 'number' &&
+			isFinite(box.width) &&
+			box.width > 0 &&
+			typeof box.height === 'number' &&
+			isFinite(box.height) &&
+			box.height > 0
 		)
 	}
 
@@ -1559,7 +1823,7 @@ class Game {
 		if (!this.cheeks) return false
 		const outOfBounds = this.cheeks.y < 0 || this.cheeks.y > this.screenHeight
 		if (outOfBounds) {
-			playKnockoutSound()
+			this.playKnockoutSound()
 			window.shareData = null
 		}
 		return outOfBounds
@@ -1599,73 +1863,25 @@ class Game {
 		this.updateHUD()
 	}
 
-	drawCopyright() {
-		const width = this.app.screen.width
-		const height = this.app.screen.height
-		const baseFontSize = Math.min(height / 32, width / 38) // Reduced size
-
-		const copyrightText = window.cheatMode
-			? 'CHEAT MODE ACTIVATED'
-			: 'NOT © 2024 FWD:FWD:FWD:'
-
-		// Use same color as round score text during game over screens
-		const textColor = gameState.gameOver
-			? 0x004643
-			: window.cheatMode
-			? 0xff0000
-			: 0x8888ff
-
-		const copyright = new PIXI.Text(copyrightText, {
-			fontFamily: 'Press Start 2P',
-			fontSize: baseFontSize,
-			fill: textColor,
-			align: 'center',
-		})
-		copyright.anchor.set(0.5)
-
-		// Create container for copyright
-		const copyrightContainer = new PIXI.Container()
-		copyrightContainer.addChild(copyright)
-
-		// Position at bottom of screen
-		copyrightContainer.x = width / 2
-		copyrightContainer.y = height - baseFontSize * 3
-
-		// Scale if needed
-		const bounds = copyrightContainer.getBounds()
-		const maxWidth = width * 0.9
-		const scale = Math.min(maxWidth / bounds.width, 1)
-		if (scale < 1) {
-			copyrightContainer.scale.set(scale)
-		}
-
-		if (window.cheatMode) {
-			// Blinking effect for cheat mode
-			this.app.ticker.add(() => {
-				copyright.visible = Math.floor(performance.now() / 250) % 2
-			})
-		}
-
-		this.hud.addChild(copyrightContainer)
-	}
-
 	createBackground() {
 		// Clear existing background
 		this.background.removeChildren()
 
-		const width = this.app.screen.width
-		const height = this.app.screen.height
+		const width = this.screenWidth
+		const height = this.screenHeight
 
-		// Create grid pattern that fills entire canvas
+		// 1. Blue background
+		const blueBackground = new PIXI.Graphics()
+		blueBackground.beginFill(0x000044, 1)
+		blueBackground.drawRect(0, 0, width, height)
+		blueBackground.endFill()
+		this.background.addChild(blueBackground)
+
+		// 2. Grid pattern
 		const gridGraphics = new PIXI.Graphics()
-
-		// Fill background with blue - 100% coverage
-		gridGraphics.beginFill(0x000044, 1)
-		gridGraphics.drawRect(0, 0, width, height)
-		gridGraphics.endFill()
+		gridGraphics.lineStyle(1, 0x4444ff, 0.3)
 
 		// Draw grid lines - fixed size grid that tiles from center
-		gridGraphics.lineStyle(1, 0x4444ff, 0.3)
 		const gridSize = 32 // Fixed grid size
 
 		// Calculate grid offsets to center the pattern
@@ -1693,24 +1909,19 @@ class Game {
 			gridGraphics.moveTo(x, 0)
 			gridGraphics.lineTo(x, height)
 		}
-
 		this.background.addChild(gridGraphics)
 
-		// Create ring and crowd for gameplay and game over screens, but not title screen
+		// Only show ring and crowd during gameplay or game over
 		if (gameState.gameStarted || gameState.gameOver) {
-			// Add crowd at top of screen
+			// 3. Add crowd at top of screen
 			const crowdTexture = PIXI.Assets.get('crowd')
-			if (crowdTexture) {
+			if (crowdTexture && crowdTexture.valid) {
 				const crowdHeight = height * 0.2
 				const scale = crowdHeight / crowdTexture.height
 				const scaledWidth = crowdTexture.width * scale
 
 				// Create crowd sprite to fill width
-				this.crowd = new PIXI.TilingSprite(
-					crowdTexture,
-					width, // Just use screen width
-					crowdHeight
-				)
+				this.crowd = new PIXI.TilingSprite(crowdTexture, width, crowdHeight)
 
 				// Position at top of screen
 				this.crowd.position.set(0, 0)
@@ -1719,14 +1930,17 @@ class Game {
 				this.background.addChild(this.crowd)
 			}
 
-			// Add ring
+			// 4. Add ring and ropes
 			this.ring = new PIXI.Container()
 			this.updateRing()
 			this.background.addChild(this.ring)
 		}
+
+		// Force a render update
+		this.app.renderer.render(this.app.stage)
 	}
 
-	showErrorScreen(message) {
+	async showErrorScreen(message) {
 		// Clear existing HUD
 		this.hud.removeChildren()
 
@@ -1742,78 +1956,417 @@ class Game {
 			wordWrap: true,
 			wordWrapWidth: width * 0.8,
 		})
-		errorText.anchor.set(0.5)
-		errorText.x = width / 2
-		errorText.y = height / 2
 
-		this.hud.addChild(errorText)
+		if (errorText) {
+			errorText.anchor.set(0.5)
+			errorText.x = width / 2
+			errorText.y = height / 2
+			this.hud.addChild(errorText)
+		}
 	}
 
-	async initializeAudio(audioAssets) {
+	async initializeAudio() {
 		try {
 			// Initialize PIXI sound
 			if (!PIXI.sound) {
 				console.warn('PIXI.sound not available')
-				audio.initialized = true
-				return
+				return false
 			}
 
-			console.log('Initializing audio with assets:', audioAssets)
+			console.log('Initializing audio...')
 
 			// Remove any existing sounds first
 			PIXI.sound.removeAll()
 
-			// Add all sounds to PIXI sound library
-			const loadPromises = []
-
-			// Add clap sounds
-			for (let i = 1; i <= 9; i++) {
-				const clapAsset = audioAssets[`clap${i}`]
-				if (clapAsset) {
-					loadPromises.push(
-						PIXI.sound.add(`clap${i}`, {
-							url: `audio/claps/clap${i}.mp3`,
-							preload: true,
-							volume: 0.3,
-						})
-					)
-				}
-			}
-
-			// Add other sounds
-			const otherSounds = {
+			// Define audio files with proper paths and settings
+			const audioFiles = {
+				clap1: { url: 'audio/claps/clap1.mp3', volume: 0.3 },
+				clap2: { url: 'audio/claps/clap2.mp3', volume: 0.3 },
+				clap3: { url: 'audio/claps/clap3.mp3', volume: 0.3 },
+				clap4: { url: 'audio/claps/clap4.mp3', volume: 0.3 },
+				clap5: { url: 'audio/claps/clap5.mp3', volume: 0.3 },
+				clap6: { url: 'audio/claps/clap6.mp3', volume: 0.3 },
+				clap7: { url: 'audio/claps/clap7.mp3', volume: 0.3 },
+				clap8: { url: 'audio/claps/clap8.mp3', volume: 0.3 },
+				clap9: { url: 'audio/claps/clap9.mp3', volume: 0.3 },
 				cheer: { url: 'audio/cheering.mp3', volume: 0.1, loop: true },
 				boo: { url: 'audio/booing.mp3', volume: 0.3 },
 				konami: { url: 'audio/konami.mp3', volume: 0.3 },
 			}
 
-			for (const [name, options] of Object.entries(otherSounds)) {
-				if (audioAssets[name]) {
-					const { url, ...soundOptions } = options
-					loadPromises.push(
-						PIXI.sound.add(name, {
-							url,
+			// Load each sound with proper error handling
+			for (const [name, options] of Object.entries(audioFiles)) {
+				try {
+					if (!PIXI.sound.exists(name)) {
+						await PIXI.sound.add(name, {
+							...options,
 							preload: true,
-							...soundOptions,
+							autoPlay: false,
 						})
-					)
+						console.log(`Loaded audio: ${name}`)
+					}
+				} catch (error) {
+					console.warn(`Failed to load sound: ${name}`, error)
 				}
 			}
 
-			// Wait for all sounds to load
-			await Promise.all(loadPromises)
+			// Resume audio context if suspended
+			if (PIXI.sound.context?.state === 'suspended') {
+				await PIXI.sound.context.resume()
+			}
 
-			// Log loaded sounds for debugging
-			console.log('Loaded sounds:', Object.keys(PIXI.sound._sounds))
+			// Verify all sounds loaded
+			const loadedSounds = Object.keys(PIXI.sound._sounds)
+			console.log('Loaded sounds:', loadedSounds)
 
-			audio.initialized = true
-			console.log(
-				'PIXI Sound initialized with sounds:',
-				Object.keys(PIXI.sound._sounds)
-			)
+			return true
 		} catch (error) {
 			console.warn('Failed to initialize audio:', error)
-			audio.initialized = true
+			return false
+		}
+	}
+
+	// Update sound playback functions
+	async playFlapSound() {
+		if (!PIXI.sound) return
+
+		try {
+			// Randomly select a clap sound from 1-9
+			const randomClap = Math.floor(Math.random() * 9) + 1
+			const soundId = `clap${randomClap}`
+
+			if (PIXI.sound.exists(soundId)) {
+				PIXI.sound.play(soundId, {
+					volume: 0.3,
+					singleInstance: true,
+				})
+			}
+		} catch (error) {
+			console.warn('Error playing flap sound:', error)
+		}
+	}
+
+	async playCheerSound() {
+		if (!PIXI.sound) return
+
+		try {
+			stopCheerSound()
+			if (PIXI.sound.exists('cheer')) {
+				cheerSound = PIXI.sound.play('cheer', {
+					volume: 0.1,
+					loop: true,
+				})
+			}
+		} catch (error) {
+			console.warn('Error playing cheer sound:', error)
+		}
+	}
+
+	async playKnockoutSound() {
+		if (!PIXI.sound) return
+
+		try {
+			stopCheerSound()
+			if (PIXI.sound.exists('boo')) {
+				PIXI.sound.play('boo', {
+					volume: 0.3,
+					singleInstance: true,
+				})
+			}
+		} catch (error) {
+			console.warn('Error playing knockout sound:', error)
+		}
+	}
+
+	// Add back the intersectRect function
+	intersectRect(r1, r2) {
+		return !(
+			r2.x > r1.x + r1.width ||
+			r2.x + r2.width < r1.x ||
+			r2.y > r1.y + r1.height ||
+			r2.y + r2.height < r1.y
+		)
+	}
+
+	async drawTitleScreen() {
+		try {
+			console.log('Drawing title screen...')
+			// Clear any existing HUD content
+			this.hud.removeChildren()
+
+			// Use screen dimensions to ensure canvas-relative positioning
+			const width = this.screenWidth
+			const height = this.screenHeight
+			const maxWidth = width * 0.95
+			const maxHeight = height * 0.95
+
+			// Larger base font size - adjusted for text only
+			const baseFontSize = Math.min(height / 10, width / 14)
+
+			// Hide player/cheeks during title screen
+			if (this.cheeks) this.cheeks.visible = false
+			if (this.gloves) this.gloves.visible = false
+
+			// Create separate containers for text and gloves
+			const textContainer = new PIXI.Container()
+			textContainer.name = 'titleTextContainer'
+
+			// Title group
+			const titleGroup = new PIXI.Container()
+			titleGroup.name = 'titleGroup'
+
+			// Create title text
+			const title1 = new PIXI.Text('CLAPPY', {
+				fontFamily: 'Press Start 2P, Arial',
+				fontSize: baseFontSize,
+				fill: 0xffa500,
+				align: 'center',
+				padding: 4,
+			})
+			title1.anchor.set(0.5)
+			title1.y = 0
+			titleGroup.addChild(title1)
+
+			const title2 = new PIXI.Text('CHEEKS!!', {
+				fontFamily: 'Press Start 2P, Arial',
+				fontSize: baseFontSize,
+				fill: 0xffa500,
+				align: 'center',
+				padding: 4,
+			})
+			title2.anchor.set(0.5)
+			title2.y = baseFontSize * 1.1
+			titleGroup.addChild(title2)
+
+			// Instructions
+			const instr1 = new PIXI.Text('3 ROUNDS PER MATCH', {
+				fontFamily: 'Press Start 2P, Arial',
+				fontSize: baseFontSize * 0.4,
+				fill: 0xffffff,
+				align: 'center',
+				padding: 4,
+			})
+			instr1.anchor.set(0.5)
+			instr1.y = baseFontSize * 2.8
+			titleGroup.addChild(instr1)
+
+			const instr2 = new PIXI.Text('DODGE PUNCHES FOR POINTS', {
+				fontFamily: 'Press Start 2P, Arial',
+				fontSize: baseFontSize * 0.4,
+				fill: 0xffffff,
+				align: 'center',
+				padding: 4,
+			})
+			instr2.anchor.set(0.5)
+			instr2.y = baseFontSize * 3.4
+			titleGroup.addChild(instr2)
+
+			// Create press space group
+			const pressSpaceGroup = new PIXI.Container()
+			pressSpaceGroup.y = baseFontSize * 4.5 // Moved up closer to instructions
+
+			// Create press space text
+			const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+			const pressText = new PIXI.Text(
+				isMobile ? 'TAP TO START' : 'PRESS SPACE',
+				{
+					fontFamily: 'Press Start 2P, Arial',
+					fontSize: baseFontSize * 0.5,
+					fill: 0xff0000,
+					align: 'center',
+					padding: 4,
+				}
+			)
+			pressText.anchor.set(0.5)
+			pressSpaceGroup.addChild(pressText)
+
+			// Add decorative gloves
+			const armTexture = PIXI.Assets.get('arm')
+			if (armTexture) {
+				const gloveSize = baseFontSize * 1.5 // Slightly smaller gloves
+				const gloveSpacing = pressText.width * 1.5 // Space based on text width
+
+				// Left glove
+				const leftGlove = new PIXI.Sprite(armTexture)
+				leftGlove.anchor.set(0.5)
+				leftGlove.x = -gloveSpacing / 2
+				leftGlove.y = pressText.height / 4
+				leftGlove.angle = 90
+				leftGlove.scale.x = -1
+				leftGlove.width = gloveSize
+				leftGlove.height = (gloveSize / armTexture.width) * armTexture.height
+
+				// Right glove
+				const rightGlove = new PIXI.Sprite(armTexture)
+				rightGlove.anchor.set(0.5)
+				rightGlove.x = gloveSpacing / 2
+				rightGlove.y = pressText.height / 4
+				rightGlove.angle = -90
+				rightGlove.width = gloveSize
+				rightGlove.height = (gloveSize / armTexture.width) * armTexture.height
+
+				pressSpaceGroup.addChild(leftGlove, rightGlove)
+
+				// Add animation for gloves and text
+				const moveHandler = () => {
+					if (this.isIdle) return
+					const time = performance.now()
+					const step = Math.floor(time / 500) % 2 // Slower blink
+					pressText.style.fill = step ? 0xff0000 : 0xffffff
+					const moveAmount = step ? gloveSize * 0.2 : 0
+					leftGlove.x = -gloveSpacing / 2 - moveAmount
+					rightGlove.x = gloveSpacing / 2 + moveAmount
+				}
+
+				this.app.ticker.add(moveHandler)
+				pressSpaceGroup._moveHandler = moveHandler
+			}
+
+			titleGroup.addChild(pressSpaceGroup)
+			textContainer.addChild(titleGroup)
+
+			// Position and scale text container
+			textContainer.x = width / 2
+			textContainer.y = height * 0.25
+
+			// Add containers to HUD
+			this.hud.addChild(textContainer)
+
+			// Draw copyright
+			await this.drawCopyright()
+
+			console.log('Title screen drawing complete')
+		} catch (error) {
+			console.error('Error drawing title screen:', error)
+			this.showErrorScreen('Error drawing title screen: ' + error.message)
+		}
+	}
+
+	async drawCopyright() {
+		const width = this.screenWidth
+		const height = this.screenHeight
+		const baseFontSize = Math.min(height / 32, width / 38) // Reduced size
+
+		const copyrightText = window.cheatMode
+			? 'CHEAT MODE ACTIVATED'
+			: 'NOT © 2024 FWD:FWD:FWD:'
+
+		// Use same color as round score text during game over screens
+		const textColor = gameState.gameOver
+			? 0x004643
+			: window.cheatMode
+			? 0xff0000
+			: 0x8888ff
+
+		const copyright = await this.createText(copyrightText, {
+			fontFamily: this.defaultTextStyle.fontFamily,
+			fontSize: baseFontSize,
+			fill: textColor,
+			align: 'center',
+		})
+
+		if (copyright) {
+			copyright.anchor.set(0.5)
+
+			// Create container for copyright
+			const copyrightContainer = new PIXI.Container()
+			copyrightContainer.addChild(copyright)
+
+			// Position at bottom of screen
+			copyrightContainer.x = width / 2
+			copyrightContainer.y = height - baseFontSize * 3
+
+			// Scale if needed
+			const bounds = copyrightContainer.getBounds()
+			const maxWidth = width * 0.9
+			const scale = Math.min(maxWidth / bounds.width, 1)
+			if (scale < 1) {
+				copyrightContainer.scale.set(scale)
+			}
+
+			if (window.cheatMode) {
+				// Blinking effect for cheat mode
+				this.app.ticker.add(() => {
+					copyright.visible = Math.floor(performance.now() / 250) % 2
+				})
+			}
+
+			this.hud.addChild(copyrightContainer)
+		}
+	}
+
+	async createText(text, style = {}) {
+		if (!this.defaultTextStyle) {
+			console.warn('Default text style not initialized')
+			return null
+		}
+
+		try {
+			// Merge with default style and ensure fallback fonts
+			const mergedStyle = {
+				...this.defaultTextStyle,
+				...style,
+				fontFamily: style.fontFamily || this.defaultTextStyle.fontFamily,
+				fontSize: style.fontSize || this.defaultTextStyle.fontSize,
+				fill: style.fill || this.defaultTextStyle.fill,
+				align: style.align || this.defaultTextStyle.align,
+				wordWrap: style.wordWrap || false,
+				wordWrapWidth: style.wordWrapWidth || 0,
+				letterSpacing: style.letterSpacing || 0,
+				padding: style.padding || 2,
+			}
+
+			// Create text with error handling
+			const textObj = new PIXI.Text(text, mergedStyle)
+			if (!textObj) {
+				console.warn('Failed to create text object')
+				return null
+			}
+
+			// Wait for texture to be created
+			await new Promise((resolve) => requestAnimationFrame(resolve))
+
+			// Validate texture
+			if (!textObj.texture || !textObj.texture.valid) {
+				console.warn('Invalid text texture')
+				return null
+			}
+
+			// Force immediate texture update
+			textObj.updateText(true)
+
+			// Cache as bitmap for better performance
+			textObj.cacheAsBitmap = true
+
+			return textObj
+		} catch (error) {
+			console.warn('Error creating text:', error)
+			return null
+		}
+	}
+
+	updateGloves(delta) {
+		const speed =
+			GLOVE_SPEED * gameState.gameSpeed * delta * (this.screenWidth / 1000)
+
+		// Move existing gloves
+		this.gloves.pairs.forEach((pair) => {
+			pair.x -= speed
+		})
+
+		// Remove off-screen gloves
+		for (let i = this.gloves.pairs.length - 1; i >= 0; i--) {
+			const pair = this.gloves.pairs[i]
+			if (pair.x + ARM_SCALE <= 0) {
+				this.gloves.removeChild(pair)
+				this.gloves.pairs.splice(i, 1)
+			}
+		}
+
+		// Spawn new gloves if needed
+		const lastPair = this.gloves.pairs[this.gloves.pairs.length - 1]
+		if (!lastPair || lastPair.x <= this.screenWidth * SPAWN_OFFSET) {
+			this.spawnGloves()
 		}
 	}
 }
@@ -1872,56 +2425,6 @@ function stopCheerSound() {
 	}
 }
 
-async function playFlapSound() {
-	if (!audio.initialized || !PIXI.sound) return
-
-	try {
-		// Randomly select a clap sound from 1-9
-		const randomClap = Math.floor(Math.random() * 9) + 1
-		const soundId = `clap${randomClap}`
-		console.log('Playing flap sound:', soundId)
-		if (PIXI.sound.exists(soundId)) {
-			await PIXI.sound.play(soundId)
-		} else {
-			console.warn('Sound not found:', soundId)
-		}
-	} catch (e) {
-		console.warn('Flap sound error:', e)
-	}
-}
-
-async function playCheerSound() {
-	if (!audio.initialized || !PIXI.sound) return
-
-	try {
-		stopCheerSound()
-		console.log('Playing cheer sound')
-		if (PIXI.sound.exists('cheer')) {
-			cheerSound = await PIXI.sound.play('cheer')
-		} else {
-			console.warn('Cheer sound not found')
-		}
-	} catch (e) {
-		console.warn('Cheer sound error:', e)
-	}
-}
-
-async function playKnockoutSound() {
-	if (!audio.initialized || !PIXI.sound) return
-
-	try {
-		stopCheerSound()
-		console.log('Playing knockout sound')
-		if (PIXI.sound.exists('boo')) {
-			await PIXI.sound.play('boo')
-		} else {
-			console.warn('Boo sound not found')
-		}
-	} catch (e) {
-		console.warn('Knockout sound error:', e)
-	}
-}
-
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', () => {
 	console.log('DOM loaded, waiting for power-on...')
@@ -1931,7 +2434,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		try {
 			console.log('Creating game instance...')
 			const gameInstance = new Game()
-			window.game = gameInstance // Explicitly set window.game
+			window.game = gameInstance
 
 			// Expose handleInput method globally
 			window.game.handleInput = gameInstance.handleInput.bind(gameInstance)
