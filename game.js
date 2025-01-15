@@ -360,47 +360,53 @@ class Game {
 		// Force immediate background update
 		this.createBackground()
 
-		// Update HUD for current game state
-		this.updateHUD()
+		// Ensure all animations are stopped and cleaned up before updating HUD
+		this.clearGameOverScreen()
 
-		// Update game objects if game is running
-		if (gameState.gameStarted && !gameState.gameOver) {
-			if (this.cheeks) {
-				// Keep cheeks at same relative position
-				const relativeX = this.cheeks.x / this.screenWidth
-				const relativeY = this.cheeks.y / this.screenHeight
-				this.cheeks.x = this.screenWidth * relativeX
-				this.cheeks.y = this.screenHeight * relativeY
+		// Add a small delay before redrawing to ensure cleanup is complete
+		setTimeout(() => {
+			// Update HUD for current game state
+			this.updateHUD()
 
-				// Update cheeks scale
-				const targetSize = CHEEKS_SIZE
-				const cheeksTexture = PIXI.Assets.get('cheeks')
-				if (cheeksTexture && cheeksTexture.valid) {
-					const baseScale =
-						targetSize / Math.max(cheeksTexture.width, cheeksTexture.height)
-					this.cheeks.scale.set(baseScale)
+			// Update game objects if game is running
+			if (gameState.gameStarted && !gameState.gameOver) {
+				if (this.cheeks) {
+					// Keep cheeks at same relative position
+					const relativeX = this.cheeks.x / this.screenWidth
+					const relativeY = this.cheeks.y / this.screenHeight
+					this.cheeks.x = this.screenWidth * relativeX
+					this.cheeks.y = this.screenHeight * relativeY
+
+					// Update cheeks scale
+					const targetSize = CHEEKS_SIZE
+					const cheeksTexture = PIXI.Assets.get('cheeks')
+					if (cheeksTexture && cheeksTexture.valid) {
+						const baseScale =
+							targetSize / Math.max(cheeksTexture.width, cheeksTexture.height)
+						this.cheeks.scale.set(baseScale)
+					}
+				}
+
+				if (this.gloves) {
+					// Update glove positions and scales
+					this.gloves.pairs.forEach((pair) => {
+						const relativeX = pair.x / this.screenWidth
+						pair.x = this.screenWidth * relativeX
+
+						// Update glove scales
+						pair.children.forEach((glove) => {
+							if (glove instanceof PIXI.Sprite) {
+								glove.width = ARM_SCALE
+								glove.scale.y = glove.scale.x
+							}
+						})
+					})
 				}
 			}
 
-			if (this.gloves) {
-				// Update glove positions and scales
-				this.gloves.pairs.forEach((pair) => {
-					const relativeX = pair.x / this.screenWidth
-					pair.x = this.screenWidth * relativeX
-
-					// Update glove scales
-					pair.children.forEach((glove) => {
-						if (glove instanceof PIXI.Sprite) {
-							glove.width = ARM_SCALE
-							glove.scale.y = glove.scale.x
-						}
-					})
-				})
-			}
-		}
-
-		// Force a render update
-		this.app.renderer.render(this.app.stage)
+			// Force a render update
+			this.app.renderer.render(this.app.stage)
+		}, 50) // Small delay to ensure cleanup is complete
 	}
 
 	async showBasicLoadingScreen() {
@@ -928,8 +934,9 @@ class Game {
 				child._blinkTicker.destroy()
 				child._blinkTicker = null
 			}
-			if (child._moveHandler) {
-				this.app.ticker.remove(child._moveHandler)
+			if (child._animationFrameId) {
+				cancelAnimationFrame(child._animationFrameId)
+				child._animationFrameId = null
 				child._moveHandler = null
 			}
 			if (child instanceof PIXI.Text) {
@@ -951,6 +958,16 @@ class Game {
 	destroyContainer(container) {
 		while (container.children.length > 0) {
 			const child = container.children[0]
+			if (child._blinkTicker) {
+				child._blinkTicker.stop()
+				child._blinkTicker.destroy()
+				child._blinkTicker = null
+			}
+			if (child._animationFrameId) {
+				cancelAnimationFrame(child._animationFrameId)
+				child._animationFrameId = null
+				child._moveHandler = null
+			}
 			if (child instanceof PIXI.Text) {
 				child.destroy(true)
 			} else if (child instanceof PIXI.Container) {
@@ -2139,8 +2156,13 @@ class Game {
 	async drawTitleScreen() {
 		try {
 			console.log('Drawing title screen...')
-			// Clear any existing HUD content
-			this.hud.removeChildren()
+			// Clear any existing HUD content with proper cleanup
+			this.clearGameOverScreen()
+
+			// Ensure app.ticker is valid
+			if (!this.app || !this.app.ticker) {
+				throw new Error('Invalid application state')
+			}
 
 			// Use screen dimensions to ensure canvas-relative positioning
 			const width = this.screenWidth
@@ -2211,7 +2233,8 @@ class Game {
 
 			// Create press space group
 			const pressSpaceGroup = new PIXI.Container()
-			pressSpaceGroup.y = baseFontSize * 4.5 // Moved up closer to instructions
+			pressSpaceGroup.name = 'pressSpaceGroup'
+			pressSpaceGroup.y = baseFontSize * 4.5
 
 			// Create press space text
 			const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
@@ -2231,8 +2254,8 @@ class Game {
 			// Add decorative gloves
 			const armTexture = PIXI.Assets.get('arm')
 			if (armTexture) {
-				const gloveSize = baseFontSize * 1.5 // Slightly smaller gloves
-				const gloveSpacing = pressText.width * 1.5 // Space based on text width
+				const gloveSize = baseFontSize * 1.5
+				const gloveSpacing = pressText.width * 1.5
 
 				// Left glove
 				const leftGlove = new PIXI.Sprite(armTexture)
@@ -2255,19 +2278,63 @@ class Game {
 
 				pressSpaceGroup.addChild(leftGlove, rightGlove)
 
-				// Add animation for gloves and text
-				const moveHandler = () => {
-					if (this.isIdle) return
-					const time = performance.now()
-					const step = Math.floor(time / 500) % 2 // Slower blink
-					pressText.style.fill = step ? 0xff0000 : 0xffffff
-					const moveAmount = step ? gloveSize * 0.2 : 0
-					leftGlove.x = -gloveSpacing / 2 - moveAmount
-					rightGlove.x = gloveSpacing / 2 + moveAmount
-				}
+				try {
+					// Create animation handler with proper cleanup checks
+					const moveHandler = () => {
+						// Check if container is still in the display list
+						if (!pressSpaceGroup.parent) {
+							if (pressSpaceGroup._animationFrameId) {
+								cancelAnimationFrame(pressSpaceGroup._animationFrameId)
+								pressSpaceGroup._animationFrameId = null
+							}
+							return
+						}
 
-				this.app.ticker.add(moveHandler)
-				pressSpaceGroup._moveHandler = moveHandler
+						if (this.isIdle) return
+
+						const time = performance.now()
+						const step = Math.floor(time / 500) % 2 // Slower blink
+
+						// Only update if objects still exist and are in the display list
+						if (pressText?.parent && pressText.style) {
+							pressText.style.fill = step ? 0xff0000 : 0xffffff
+						}
+
+						const moveAmount = step ? gloveSize * 0.2 : 0
+						if (leftGlove?.parent && rightGlove?.parent) {
+							leftGlove.x = -gloveSpacing / 2 - moveAmount
+							rightGlove.x = gloveSpacing / 2 + moveAmount
+						} else {
+							// If gloves are gone, stop animation
+							if (pressSpaceGroup._animationFrameId) {
+								cancelAnimationFrame(pressSpaceGroup._animationFrameId)
+								pressSpaceGroup._animationFrameId = null
+							}
+						}
+					}
+
+					// Store handler reference for cleanup
+					pressSpaceGroup._moveHandler = moveHandler
+
+					// Use requestAnimationFrame for smoother animation
+					let animationFrameId
+					const animate = () => {
+						if (!pressSpaceGroup.parent) {
+							cancelAnimationFrame(animationFrameId)
+							pressSpaceGroup._animationFrameId = null
+							return
+						}
+						moveHandler()
+						animationFrameId = requestAnimationFrame(animate)
+					}
+					animationFrameId = requestAnimationFrame(animate)
+
+					// Store animation frame ID for cleanup
+					pressSpaceGroup._animationFrameId = animationFrameId
+				} catch (error) {
+					console.warn('Failed to setup animation:', error)
+					// Continue without animation if it fails
+				}
 			}
 
 			titleGroup.addChild(pressSpaceGroup)
