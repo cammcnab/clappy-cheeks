@@ -1293,13 +1293,9 @@ class Game {
 			this.exitIdleState()
 		}
 
-		// Don't allow game input if we're in Konami sequence
-		if (
-			window.konamiState &&
-			(window.konamiState.isWaitingForAB() ||
-				window.konamiState.isCompletingKonami())
-		) {
-			console.log('Blocking game input during Konami sequence')
+		// Don't allow game input if we're in Konami sequence completion
+		if (window.konamiState && window.konamiState.isCompletingKonami()) {
+			console.log('Blocking game input during Konami completion')
 			return
 		}
 
@@ -1728,7 +1724,11 @@ class Game {
 					// Score points for passing gloves
 					if (!pair.passed && this.cheeks.x > pair.x) {
 						pair.passed = true
-						gameState.score += window.cheatPoints || 1
+						const pointsToAdd = window.cheatMode ? window.cheatPoints || 10 : 1
+						gameState.score += pointsToAdd
+
+						// Update HUD immediately after score change
+						this.updateHUD()
 
 						// Update game speed
 						if (
