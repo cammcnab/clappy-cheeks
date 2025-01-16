@@ -391,7 +391,7 @@ class Game {
 		MIN_GAP = height * 0.3
 		MAX_GAP = height * 0.45
 		GLOVE_OPENING = MIN_GAP + Math.random() * (MAX_GAP - MIN_GAP)
-		CHEEKS_SIZE = height * 0.12
+		CHEEKS_SIZE = height * 0.18
 		ARM_SCALE = height * 0.12
 	}
 
