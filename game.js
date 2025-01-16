@@ -10,30 +10,6 @@ const SPEED_INCREASE = 0.08
 const MAX_SPEED = 2
 const SQUISH_DURATION = 100
 
-// Layout constants (relative to base font size)
-const LAYOUT = {
-	PADDING: 0.25, // Standard padding (e.g. HUD elements)
-	LINE_HEIGHT: 1.1, // Standard line height multiplier
-	LINE_SPACING: 1.2, // Space between lines of text
-	HUD_HEIGHT: 0.75, // Height of HUD elements
-	TITLE_LINE_GAP: 1.1, // Gap between title lines
-	INSTRUCTION_START: 2.8, // Y position to start instructions
-	INSTRUCTION_GAP: 0.6, // Gap between instruction lines
-	PRESS_SPACE_OFFSET: 4.8, // Y offset for press space text
-	COPYRIGHT_BOTTOM: 1.0, // Distance from bottom for copyright
-	MOBILE_Y_POSITION: 0.4, // Mobile vertical position multiplier
-	DESKTOP_Y_POSITION: 0.35, // Desktop vertical position multiplier
-}
-
-// Text size scales (relative to base font size)
-const TEXT_SIZES = {
-	TITLE: 1.0, // Title text (e.g. "CLAPPY CHEEKS!!")
-	LARGE: 0.8, // Large text (e.g. "ROUND OVER!!")
-	MEDIUM: 0.5, // Medium text (e.g. "instructions, PRESS SPACE")
-	SMALL: 0.35, // Small text (e.g. score)
-	TINY: 0.25, // Tiny text (e.g. copyright)
-}
-
 // Global mobile check - using more comprehensive detection
 const isMobile = (function () {
 	// First check for common mobile indicators
@@ -52,20 +28,39 @@ const isMobile = (function () {
 	return check
 })()
 
+// Layout constants (relative to base font size)
+const LAYOUT = {
+	PADDING: 0.25, // Standard padding (e.g. HUD elements)
+	LINE_HEIGHT: 1.1, // Standard line height multiplier
+	LINE_SPACING: 1.2, // Space between lines of text
+	HUD_HEIGHT: 0.75, // Height of HUD elements
+	TITLE_LINE_GAP: isMobile ? 1.4 : 1.1, // Gap between title lines
+	INSTRUCTION_START: isMobile ? 3.4 : 2.8, // Y position to start instructions
+	INSTRUCTION_GAP: isMobile ? 0.8 : 0.6, // Gap between instruction lines
+	PRESS_SPACE_OFFSET: isMobile ? 5.8 : 4.8, // Y offset for press space text
+	COPYRIGHT_BOTTOM: 1.0, // Distance from bottom for copyright
+	MOBILE_Y_POSITION: 0.4, // Mobile vertical position multiplier
+	DESKTOP_Y_POSITION: 0.35, // Desktop vertical position multiplier
+}
+
 // Make it available globally
 window.isMobile = isMobile
 
+// Text size scales (relative to base font size)
+const TEXT_SIZES = {
+	TITLE: isMobile ? 1.3 : 1.0, // Title text (e.g. "CLAPPY CHEEKS!!")
+	LARGE: 0.8, // Large text (e.g. "ROUND OVER!!")
+	MEDIUM: 0.5, // Medium text (e.g. "instructions, PRESS SPACE")
+	SMALL: isMobile ? 0.45 : 0.35, // Small text (e.g. score)
+	TINY: isMobile ? 0.35 : 0.2, // Tiny text (e.g. copyright)
+}
+
 // Global font size helper
 const getBaseFontSize = (width, height, options = {}) => {
-	const {
-		scale = 1,
-		mobileScale = 1.3,
-		widthDivisor = 14,
-		heightDivisor = 10,
-	} = options
+	const { scale = 1, widthDivisor = 14, heightDivisor = 10 } = options
 
 	const baseSize = Math.min(height / heightDivisor, width / widthDivisor)
-	return isMobile ? baseSize * mobileScale * scale : baseSize * scale
+	return baseSize * scale
 }
 
 // Make it available globally
@@ -391,8 +386,8 @@ class Game {
 		MIN_GAP = height * 0.3
 		MAX_GAP = height * 0.45
 		GLOVE_OPENING = MIN_GAP + Math.random() * (MAX_GAP - MIN_GAP)
-		CHEEKS_SIZE = height * 0.18
-		ARM_SCALE = height * 0.12
+		CHEEKS_SIZE = height * (isMobile ? 0.16 : 0.18)
+		ARM_SCALE = height * (isMobile ? 0.1 : 0.12)
 	}
 
 	handleResize() {
@@ -1253,7 +1248,7 @@ class Game {
 			const gloveSize = Math.min(this.screenHeight, this.screenWidth) * 0.1
 
 			// Calculate positions to pin to edges with small padding
-			const edgePadding = this.screenWidth * 0.22
+			const edgePadding = this.screenWidth * (isMobile ? 0.18 : 0.22)
 			let leftX = -this.screenWidth / 1.5 + edgePadding
 			let rightX = this.screenWidth / 1.5 - edgePadding
 
@@ -1370,10 +1365,13 @@ class Game {
 		const roundsGroup = new PIXI.Container()
 		roundsGroup.addChild(roundsContainer, roundsLabel)
 
-		// Position groups to touch in center
-		const centerX = width / 2
-		pointsGroup.position.set(centerX - pointsWidth, 0)
-		roundsGroup.position.set(centerX, 0)
+		// Calculate total width of both containers together
+		const totalWidth = pointsWidth + roundsWidth
+
+		// Position groups to be centered on screen
+		const startX = (width - totalWidth) / 2
+		pointsGroup.position.set(startX, 0)
+		roundsGroup.position.set(startX + pointsWidth, 0)
 
 		this.hud.addChild(pointsGroup, roundsGroup)
 	}
