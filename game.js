@@ -687,24 +687,39 @@ class Game {
 
 		// Ring dimensions
 		const ringPadding = height * 0.05 // 5% padding from edges
-		const ringTop = height * 0.3 // Position at 30% of canvas height (moved down)
+		const ringTop = height * 0.3 // Position at 30% of canvas height
+		const floorTop = ringTop - height * 0.06 // Shift floor top edge up slightly
 		const ringBottom = height + ringPadding // Extend slightly below canvas
 		const postWidth = Math.max(width * 0.015, 10) // 1.5% of width, min 10px
 		const postHeight = height * 0.2 // 20% of canvas height
-		const floorExtension = width * 0.1 // Extend 10% beyond edges
+		const floorExtension = width * 0.24 // 15% extension for bottom corners
+		const topExtension = width * 0.05 // 8% extension for top corners
 
 		// Center offset for the entire ring
-		const centerOffset = width * 0.1 // 10% of width for centering
+		const centerOffset = width * 0.15 // Keep posts inset from edges
 		const ringLeft = centerOffset
 		const ringRight = width - centerOffset
 
 		// Ring floor
 		const floor = new PIXI.Graphics()
-		floor.beginFill(0x00cec4, 0.8) // Semi-transparent turquoise
-		floor.moveTo(ringLeft - floorExtension, ringTop - floorExtension / 3)
-		floor.lineTo(ringRight + floorExtension, ringTop - floorExtension / 3)
-		floor.lineTo(ringRight + floorExtension, ringBottom)
-		floor.lineTo(ringLeft - floorExtension, ringBottom)
+		floor.beginFill(0x00cec4, 1.0)
+
+		// Calculate curve height for top edge
+		const curveHeight = height * 0.02 // 2% of screen height
+
+		// Draw floor with curved top edge and perspective
+		floor.moveTo(ringLeft - topExtension, floorTop) // Start at top left with moderate extension
+		floor.bezierCurveTo(
+			ringLeft + (ringRight - ringLeft) * 0.25,
+			floorTop - curveHeight,
+			ringLeft + (ringRight - ringLeft) * 0.75,
+			floorTop - curveHeight,
+			ringRight + topExtension,
+			floorTop // End at top right with moderate extension
+		)
+		floor.lineTo(ringRight + floorExtension, ringBottom) // Wider at bottom right
+		floor.lineTo(ringLeft - floorExtension, ringBottom) // Wider at bottom left
+		floor.closePath()
 		floor.endFill()
 		this.ring.addChild(floor)
 
@@ -730,22 +745,54 @@ class Game {
 		for (let i = 0; i < 3; i++) {
 			const ropeSpacing = postHeight / 4 // Even spacing between ropes
 			const topY = ringTop - postHeight + ropeSpacing * (i + 1)
-			const bottomY = ringBottom - (ringPadding * (i + 1)) / 2
+
+			// Space bottom points evenly with slight outward progression
+			const bottomY = ringBottom - ringPadding * 0.8 // All ropes end at same height
+			// Reverse the spread order (2,1,0 instead of 0,1,2)
+			const sideOffset = floorExtension * (0.6 + (2 - i) * 0.15) // Top rope spreads most, bottom least
+
+			// Very gentle curve
+			const curveWidth = width * 0.01 // Minimal curve
 
 			// Set rope color
 			ropes.lineStyle(ropeThickness, ropeColors[i], 0.8)
 
-			// Left side rope
+			// Left side rope with minimal curve - single outward arc
 			ropes.moveTo(ringLeft + postWidth / 2, topY)
-			ropes.lineTo(ringLeft - floorExtension, bottomY)
+			ropes.bezierCurveTo(
+				ringLeft - sideOffset * 0.4, // Move control point out less
+				topY + (bottomY - topY) * 0.4, // Move to middle for smooth arc
+				ringLeft - sideOffset * 0.2, // Keep same distance for smooth arc
+				topY + (bottomY - topY) * 0.2, // Keep at middle for smooth arc
+				ringLeft - sideOffset,
+				bottomY
+			)
 
-			// Right side rope
+			// Right side rope with minimal curve - single outward arc
 			ropes.moveTo(ringRight - postWidth / 2, topY)
-			ropes.lineTo(ringRight + floorExtension, bottomY)
+			ropes.bezierCurveTo(
+				ringRight + sideOffset * 0.4, // Move control point out less
+				topY + (bottomY - topY) * 0.4, // Move to middle for smooth arc
+				ringRight + sideOffset * 0.2, // Keep same distance for smooth arc
+				topY + (bottomY - topY) * 0.2, // Keep at middle for smooth arc
+				ringRight + sideOffset,
+				bottomY
+			)
 
-			// Horizontal rope connecting posts
+			// Calculate relative curve height for each rope
+			// Top rope has full curve, middle and bottom ropes have progressively less curve
+			const ropeCurveHeight = curveHeight * (1 - i * 0.2) // Reduce curve by 20% for each lower rope
+
+			// Horizontal rope connecting posts - gentle upward arc
 			ropes.moveTo(ringLeft + postWidth / 2, topY)
-			ropes.lineTo(ringRight - postWidth / 2, topY)
+			ropes.bezierCurveTo(
+				ringLeft + (ringRight - ringLeft) * 0.25,
+				topY - ropeCurveHeight * 0.5, // Inverted curve height for upward arc
+				ringLeft + (ringRight - ringLeft) * 0.75,
+				topY - ropeCurveHeight * 0.5, // Inverted curve height for upward arc
+				ringRight - postWidth / 2,
+				topY
+			)
 		}
 		this.ring.addChild(ropes)
 
@@ -1978,10 +2025,15 @@ class Game {
 
 		// Only show ring and crowd during gameplay or game over
 		if (gameState.gameStarted || gameState.gameOver) {
-			// 3. Add crowd at top of screen
+			// Create ring container first
+			this.ring = new PIXI.Container()
+			this.updateRing()
+			this.background.addChild(this.ring)
+
+			// Add crowd behind ring
 			const crowdTexture = PIXI.Assets.get('crowd')
 			if (crowdTexture && crowdTexture.valid) {
-				const crowdHeight = height * 0.2
+				const crowdHeight = height * 0.3
 				const scale = crowdHeight / crowdTexture.height
 				const scaledWidth = crowdTexture.width * scale
 
@@ -1992,13 +2044,13 @@ class Game {
 				this.crowd.position.set(0, 0)
 				this.crowd.tileScale.set(scale)
 				this.crowd.alpha = 0.6
-				this.background.addChild(this.crowd)
-			}
 
-			// 4. Add ring and ropes
-			this.ring = new PIXI.Container()
-			this.updateRing()
-			this.background.addChild(this.ring)
+				// Insert crowd behind ring in the display list
+				this.background.addChildAt(
+					this.crowd,
+					this.background.getChildIndex(this.ring)
+				)
+			}
 		}
 
 		// Force a render update
