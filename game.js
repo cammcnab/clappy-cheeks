@@ -1053,10 +1053,10 @@ class Game {
 			contentGroup.addChild(roundOver)
 		}
 
-		// Use consistent font size for score text (same as title screen instructions)
+		// Use consistent font size for score text
 		const scoreSize = baseFontSize * 0.4
-		const scoreColor = 0x004643 // Darker teal color
-		const lineSpacing = scoreSize * 1.2 // Tighter spacing
+		const scoreColor = 0x004643
+		const lineSpacing = scoreSize * 1.2
 
 		const roundScore = await this.createText(
 			`ROUND SCORE: ${gameState.score}`,
@@ -1106,40 +1106,10 @@ class Game {
 			contentGroup.addChild(roundsLeftText)
 		}
 
-		// Check if mobile device
-		const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-		const buttonText = isMobile ? 'TAP TO CONTINUE' : 'PRESS SPACE'
-
-		const pressSpace = await this.createText(buttonText, {
-			fontFamily: 'Press Start 2P',
-			fontSize: baseFontSize * 0.5,
-			fill: 0xff0000,
-			align: 'center',
-		})
-
-		if (pressSpace) {
-			pressSpace.anchor.set(0.5)
-			pressSpace.y = roundsLeftText.y + baseFontSize * 1.1
-			contentGroup.addChild(pressSpace)
-
-			// Add blink animation
-			const blinkHandler = () => {
-				if (!pressSpace.parent) {
-					this.app.ticker.remove(blinkHandler)
-					return
-				}
-				const time = performance.now()
-				const step = Math.floor(time / 500) % 2
-				pressSpace.style.fill = step ? 0xff0000 : 0xffffff
-			}
-			this.app.ticker.add(blinkHandler)
-			pressSpace._blinkHandler = blinkHandler
-		}
-
 		// Add content group to main container
 		mainContainer.addChild(contentGroup)
 
-		// Center the main container like title screen
+		// Center the main container
 		const bounds = contentGroup.getBounds()
 		mainContainer.position.set(
 			this.screenWidth / 2,
@@ -1148,6 +1118,47 @@ class Game {
 
 		// Draw copyright separately
 		await this.drawCopyright('round')
+
+		// Add press space group after knockout delay
+		setTimeout(() => {
+			const pressSpaceGroup = new PIXI.Container()
+			pressSpaceGroup.name = 'pressSpaceGroup'
+
+			const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+			const buttonText = isMobile ? 'TAP TO CONTINUE' : 'PRESS SPACE'
+
+			const pressText = new PIXI.Text(buttonText, {
+				fontFamily: 'Press Start 2P',
+				fontSize: baseFontSize * 0.5,
+				fill: 0xff0000,
+				align: 'center',
+			})
+
+			pressText.anchor.set(0.5)
+			pressSpaceGroup.addChild(pressText)
+			pressSpaceGroup.y = roundsLeftText.y + baseFontSize * 1.1
+			contentGroup.addChild(pressSpaceGroup)
+
+			const moveHandler = () => {
+				if (!pressSpaceGroup.parent) {
+					this.app.ticker.remove(moveHandler)
+					return
+				}
+
+				const time = performance.now()
+				const step = Math.floor(time / 400) % 2 // Faster blink
+				if (pressSpaceGroup.children[0]?.style) {
+					pressSpaceGroup.children[0].style.fill = step ? 0xff0000 : 0xffffff
+				}
+			}
+
+			this.app.ticker.add(moveHandler)
+			pressSpaceGroup._moveHandler = moveHandler
+			moveHandler()
+
+			// Force a render update
+			this.app.renderer.render(this.app.stage)
+		}, KNOCKOUT_DELAY)
 	}
 
 	addDecorativeGloves(pressSpaceGroup, menuSize) {
@@ -1196,7 +1207,7 @@ class Game {
 				if (this.isIdle) return
 
 				const time = performance.now()
-				const step = Math.floor(time / 500) % 2 // Slower blink
+				const step = Math.floor(time / 400) % 2 // Faster blink (changed from 500)
 
 				// Only update if objects still exist and are in the display list
 				if (pressSpaceGroup.children[0]?.style) {
@@ -1619,6 +1630,16 @@ class Game {
 		// Only update game state if game is started and not over
 		if (gameState.gameStarted && !gameState.gameOver) {
 			this.updateGameState(delta)
+		}
+
+		// Ensure animations continue during game over
+		if (gameState.gameOver) {
+			// Update any active blink handlers
+			this.hud.children.forEach((child) => {
+				if (child._moveHandler) {
+					child._moveHandler()
+				}
+			})
 		}
 
 		// Force a render update
@@ -2367,13 +2388,15 @@ class Game {
 			copyrightContainer.y = height - baseFontSize * 3
 
 			if (window.cheatMode) {
-				// Blinking effect for cheat mode
+				// Blinking effect for cheat mode - sync with other blink effects
 				const blinkHandler = () => {
 					if (!copyright.parent) {
 						this.app.ticker.remove(blinkHandler)
 						return
 					}
-					copyright.visible = Math.floor(performance.now() / 250) % 2
+					const time = performance.now()
+					const step = Math.floor(time / 400) % 2 // Faster blink (changed from 500)
+					copyright.visible = step === 1
 				}
 				this.app.ticker.add(blinkHandler)
 				copyright._blinkHandler = blinkHandler
