@@ -1471,7 +1471,8 @@ class Game {
 				gameState.gameStartTime = performance.now()
 				this.startGame()
 				this.playCheerSound()
-			} else {
+			} else if (this.hud.getChildByName('pressSpaceGroup')) {
+				// Only check for pressSpaceGroup on final game over
 				console.log('Game complete, resetting...')
 				gameState.gameStarted = false
 				gameState.gameOver = false
