@@ -148,37 +148,35 @@ async function loadGameAssets() {
 	try {
 		console.log('Loading game assets...')
 
-		// Load textures first
-		const texturePromises = Object.entries(ASSETS.textures).map(
-			async ([name, url]) => {
-				try {
-					// Check if texture is already loaded and valid
-					let texture = PIXI.Assets.get(name)
-					if (!texture || !texture.valid) {
-						console.log(`Loading texture: ${name} from ${url}`)
-						texture = await PIXI.Assets.load(url)
-						if (!texture || !texture.valid) {
-							throw new Error(`Failed to load texture: ${name}`)
-						}
-						// Cache the texture
-						PIXI.Assets.cache.set(name, texture)
-					} else {
-						console.log(`Texture ${name} already loaded and valid`)
-					}
-					return texture
-				} catch (error) {
-					console.warn(`Failed to load texture: ${name}`, error)
-					return null
-				}
-			}
-		)
+		// Initialize PIXI Assets
+		await PIXI.Assets.init({
+			manifest: {
+				bundles: [
+					{
+						name: 'game-textures',
+						assets: [
+							{
+								name: 'cheeks',
+								srcs: './images/cheeks.png',
+							},
+							{
+								name: 'arm',
+								srcs: './images/arm.png',
+							},
+							{
+								name: 'crowd',
+								srcs: './images/crowd-fade.png',
+							},
+						],
+					},
+				],
+			},
+		})
 
-		// Wait for all textures to load
-		const textures = await Promise.all(texturePromises)
-		const allTexturesLoaded = textures.every((texture) => texture !== null)
-		if (!allTexturesLoaded) {
-			console.warn('Some textures failed to load')
-		}
+		// Load all textures as a bundle
+		console.log('Loading texture bundle...')
+		const textures = await PIXI.Assets.loadBundle('game-textures')
+		console.log('Texture bundle loaded:', textures)
 
 		// Load audio assets if not already loaded
 		if (PIXI.sound) {
@@ -862,7 +860,7 @@ class Game {
 			const criticalTextures = ['arm', 'cheeks']
 			for (const textureName of criticalTextures) {
 				const texture = PIXI.Assets.get(textureName)
-				if (!texture || !texture.texture) {
+				if (!texture) {
 					console.warn(`Critical texture ${textureName} is invalid or missing`)
 				}
 			}
@@ -1074,7 +1072,7 @@ class Game {
 	async initGameObjects() {
 		// Create cheeks sprite with proper texture loading
 		try {
-			const cheeksTexture = await PIXI.Assets.load('./images/cheeks.png')
+			const cheeksTexture = PIXI.Assets.get('cheeks')
 			if (cheeksTexture && cheeksTexture.valid) {
 				console.log('Creating cheeks sprite with texture')
 				this.cheeks = new PIXI.Sprite(cheeksTexture)
