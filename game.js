@@ -10,6 +10,67 @@ const SPEED_INCREASE = 0.08
 const MAX_SPEED = 2
 const SQUISH_DURATION = 100
 
+// Layout constants (relative to base font size)
+const LAYOUT = {
+	PADDING: 0.25, // Standard padding (e.g. HUD elements)
+	LINE_HEIGHT: 1.1, // Standard line height multiplier
+	LINE_SPACING: 1.2, // Space between lines of text
+	HUD_HEIGHT: 0.75, // Height of HUD elements
+	TITLE_LINE_GAP: 1.1, // Gap between title lines
+	INSTRUCTION_START: 2.8, // Y position to start instructions
+	INSTRUCTION_GAP: 0.6, // Gap between instruction lines
+	PRESS_SPACE_OFFSET: 4.8, // Y offset for press space text
+	COPYRIGHT_BOTTOM: 1.0, // Distance from bottom for copyright
+	MOBILE_Y_POSITION: 0.4, // Mobile vertical position multiplier
+	DESKTOP_Y_POSITION: 0.35, // Desktop vertical position multiplier
+}
+
+// Text size scales (relative to base font size)
+const TEXT_SIZES = {
+	TITLE: 1.0, // Title text (e.g. "CLAPPY CHEEKS!!")
+	LARGE: 0.8, // Large text (e.g. "ROUND OVER!!")
+	MEDIUM: 0.5, // Medium text (e.g. "PRESS SPACE")
+	SMALL: 0.4, // Small text (e.g. instructions, score)
+	TINY: 0.25, // Tiny text (e.g. copyright)
+}
+
+// Global mobile check - using more comprehensive detection
+const isMobile = (function () {
+	// First check for common mobile indicators
+	let check = 'DeviceOrientationEvent' in window || 'orientation' in window
+
+	// Then check user agent for desktop OS and override
+	if (/Windows NT|Macintosh|Mac OS X/i.test(navigator.userAgent)) {
+		check = false
+	}
+
+	// Finally check for definitive mobile indicators
+	if (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+		check = true
+	}
+
+	return check
+})()
+
+// Make it available globally
+window.isMobile = isMobile
+
+// Global font size helper
+const getBaseFontSize = (width, height, options = {}) => {
+	const {
+		scale = 1,
+		mobileScale = 1.3,
+		widthDivisor = 14,
+		heightDivisor = 10,
+	} = options
+
+	const baseSize = Math.min(height / heightDivisor, width / widthDivisor)
+	return isMobile ? baseSize * mobileScale * scale : baseSize * scale
+}
+
+// Make it available globally
+window.getBaseFontSize = getBaseFontSize
+
 // Screen-relative constants (these will be calculated in the Game class)
 let GLOVE_WIDTH
 let GLOVE_OPENING
@@ -236,12 +297,12 @@ class Game {
 
 		const width = this.app.screen.width
 		const height = this.app.screen.height
-		const fontSize = Math.min(height / 10, width / 20)
+		const fontSize = getBaseFontSize(width, height, { widthDivisor: 20 })
 
 		// Create loading text
 		const loadingText = new PIXI.Text('LOADING...', {
 			fontFamily: 'Press Start 2P',
-			fontSize: fontSize,
+			fontSize: fontSize * TEXT_SIZES.LARGE,
 			fill: 0xffffff,
 			align: 'center',
 		})
@@ -283,9 +344,9 @@ class Game {
 
 			// Create Bloom filter with proper settings
 			this.bloomFilter = new PIXI.filters.BloomFilter()
-			this.bloomFilter.strength = 20
-			this.bloomFilter.blurX = window.isMobile ? 2 : 4
-			this.bloomFilter.blurY = window.isMobile ? 1 : 2
+			this.bloomFilter.strength = 15
+			this.bloomFilter.blurX = window.isMobile ? 1 : 5
+			this.bloomFilter.blurY = window.isMobile ? 0.5 : 3
 			this.bloomFilter.quality = 20
 			this.bloomFilter.kernelSize = 9
 
@@ -691,13 +752,13 @@ class Game {
 
 		// Ring dimensions
 		const ringPadding = height * 0.05 // 5% padding from edges
-		const ringTop = height * 0.3 // Position at 30% of canvas height
+		const ringTop = height * 0.25 // Position at 30% of canvas height
 		const floorTop = ringTop - height * 0.06 // Shift floor top edge up slightly
 		const ringBottom = height + ringPadding // Extend slightly below canvas
 		const postWidth = Math.max(width * 0.015, 10) // 1.5% of width, min 10px
 		const postHeight = height * 0.2 // 20% of canvas height
-		const floorExtension = width * 0.24 // 15% extension for bottom corners
-		const topExtension = width * 0.05 // 8% extension for top corners
+		const floorExtension = width * 0.4
+		const topExtension = width * 0.05
 
 		// Center offset for the entire ring
 		const centerOffset = width * 0.15 // Keep posts inset from edges
@@ -830,20 +891,20 @@ class Game {
 					// Get screen dimensions
 					const width = this.screenWidth
 					const height = this.screenHeight
+					const baseFontSize = getBaseFontSize(width, height)
 
 					// Create container for round over content
 					const roundOverContainer = new PIXI.Container()
 					roundOverContainer.name = 'roundOverContainer'
-
-					// Calculate base font size based on screen dimensions
-					const baseFontSize = Math.min(height / 10, width / 14)
 
 					// Draw round over screen
 					await this.drawRoundOver(roundOverContainer, baseFontSize)
 
 					// Position and scale container
 					roundOverContainer.x = width / 2
-					roundOverContainer.y = height * 0.35
+					roundOverContainer.y = window.isMobile
+						? height * LAYOUT.MOBILE_Y_POSITION
+						: height * LAYOUT.DESKTOP_Y_POSITION
 
 					// Add to HUD
 					this.hud.addChild(roundOverContainer)
@@ -881,8 +942,7 @@ class Game {
 			const gameOverContainer = new PIXI.Container()
 			gameOverContainer.name = 'gameOverContainer'
 
-			// Calculate base font size based on screen dimensions
-			const baseFontSize = Math.min(height / 10, width / 14)
+			const baseFontSize = getBaseFontSize(width, height)
 
 			if (gameState.roundsLeft > 0) {
 				// Draw round over screen
@@ -991,7 +1051,7 @@ class Game {
 
 		const knockout = await this.createText('KNOCKOUT!!', {
 			fontFamily: 'Press Start 2P',
-			fontSize: baseFontSize,
+			fontSize: baseFontSize * TEXT_SIZES.TITLE,
 			fill: 0x000044,
 			align: 'center',
 		})
@@ -1003,18 +1063,17 @@ class Game {
 		}
 
 		const finalScore = gameState.totalScore + gameState.score
-		const scoreText = `FINAL SCORE: ${finalScore}`
-		const scoreTextObj = await this.createText(scoreText, {
+		const scoreText = await this.createText(`FINAL SCORE: ${finalScore}`, {
 			fontFamily: 'Press Start 2P',
-			fontSize: baseFontSize * 0.8,
+			fontSize: baseFontSize * TEXT_SIZES.LARGE,
 			fill: 0x000044,
 			align: 'center',
 		})
 
-		if (scoreTextObj) {
-			scoreTextObj.anchor.set(0.5)
-			scoreTextObj.y = baseFontSize * 1.5
-			contentGroup.addChild(scoreTextObj)
+		if (scoreText) {
+			scoreText.anchor.set(0.5)
+			scoreText.y = baseFontSize * LAYOUT.LINE_HEIGHT
+			contentGroup.addChild(scoreText)
 		}
 
 		// Add content group to main container
@@ -1042,7 +1101,7 @@ class Game {
 		// Add "ROUND OVER!!" text
 		const roundOver = await this.createText('ROUND OVER!!', {
 			fontFamily: 'Press Start 2P',
-			fontSize: baseFontSize * 0.8,
+			fontSize: baseFontSize * TEXT_SIZES.LARGE,
 			fill: 0x000044,
 			align: 'center',
 		})
@@ -1054,9 +1113,9 @@ class Game {
 		}
 
 		// Use consistent font size for score text
-		const scoreSize = baseFontSize * 0.4
+		const scoreSize = baseFontSize * TEXT_SIZES.SMALL
 		const scoreColor = 0x004643
-		const lineSpacing = scoreSize * 1.2
+		const lineSpacing = scoreSize * LAYOUT.LINE_SPACING
 
 		const roundScore = await this.createText(
 			`ROUND SCORE: ${gameState.score}`,
@@ -1070,7 +1129,7 @@ class Game {
 
 		if (roundScore) {
 			roundScore.anchor.set(0.5)
-			roundScore.y = baseFontSize * 1.3
+			roundScore.y = baseFontSize * LAYOUT.LINE_HEIGHT
 			contentGroup.addChild(roundScore)
 		}
 
@@ -1113,7 +1172,9 @@ class Game {
 		const bounds = contentGroup.getBounds()
 		mainContainer.position.set(
 			this.screenWidth / 2,
-			(this.screenHeight - bounds.height) / 2
+			window.isMobile
+				? this.screenHeight * LAYOUT.MOBILE_Y_POSITION
+				: this.screenHeight * LAYOUT.DESKTOP_Y_POSITION
 		)
 
 		// Draw copyright separately
@@ -1124,19 +1185,18 @@ class Game {
 			const pressSpaceGroup = new PIXI.Container()
 			pressSpaceGroup.name = 'pressSpaceGroup'
 
-			const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
 			const buttonText = isMobile ? 'TAP TO CONTINUE' : 'PRESS SPACE'
 
 			const pressText = new PIXI.Text(buttonText, {
 				fontFamily: 'Press Start 2P',
-				fontSize: baseFontSize * 0.5,
+				fontSize: baseFontSize * TEXT_SIZES.MEDIUM,
 				fill: 0xff0000,
 				align: 'center',
 			})
 
 			pressText.anchor.set(0.5)
 			pressSpaceGroup.addChild(pressText)
-			pressSpaceGroup.y = roundsLeftText.y + baseFontSize * 1.1
+			pressSpaceGroup.y = roundsLeftText.y + baseFontSize * LAYOUT.LINE_HEIGHT
 			contentGroup.addChild(pressSpaceGroup)
 
 			const moveHandler = () => {
@@ -1234,8 +1294,8 @@ class Game {
 	async drawGameHUD() {
 		const width = this.app.screen.width
 		const height = this.app.screen.height
-		const fontSize = Math.min(width / 40, height / 20)
-		const padding = fontSize * 0.75
+		const baseFontSize = getBaseFontSize(width, height)
+		const padding = baseFontSize * LAYOUT.PADDING
 
 		// Clear existing HUD
 		this.hud.removeChildren()
@@ -1244,20 +1304,20 @@ class Game {
 		const pointsText = `POINTS: ${gameState.score}`
 		const pointsStyle = {
 			fontFamily: 'Press Start 2P',
-			fontSize: fontSize,
+			fontSize: baseFontSize * TEXT_SIZES.SMALL,
 			fill: 0x000000,
 			align: 'left',
 		}
 
+		const hudHeight = baseFontSize * LAYOUT.HUD_HEIGHT
 		const pointsLabel = new PIXI.Text(pointsText, pointsStyle)
 		const pointsWidth = pointsLabel.width + padding * 2
-		const hudHeight = fontSize * 1.5
 
 		// Rounds display (right side)
 		const roundsText = `ROUND ${gameState.currentRound}`
 		const roundsStyle = {
 			fontFamily: 'Press Start 2P',
-			fontSize: fontSize,
+			fontSize: baseFontSize * TEXT_SIZES.SMALL,
 			fill: 0xffffff,
 			align: 'right',
 		}
@@ -2086,11 +2146,11 @@ class Game {
 
 		const width = this.screenWidth
 		const height = this.screenHeight
-		const fontSize = Math.min(height * 0.04, width * 0.05) // 4% of screen height
+		const fontSize = getBaseFontSize(width, height)
 
 		const errorText = new PIXI.Text(message, {
 			fontFamily: 'Press Start 2P',
-			fontSize: fontSize,
+			fontSize: fontSize * TEXT_SIZES.MEDIUM,
 			fill: 0xff0000,
 			align: 'center',
 			wordWrap: true,
@@ -2246,7 +2306,7 @@ class Game {
 			const maxHeight = height * 0.95
 
 			// Larger base font size - adjusted for text only
-			const baseFontSize = Math.min(height / 10, width / 14)
+			const baseFontSize = getBaseFontSize(width, height)
 
 			// Hide player/cheeks during title screen
 			if (this.cheeks) this.cheeks.visible = false
@@ -2263,7 +2323,7 @@ class Game {
 			// Create title text
 			const title1 = new PIXI.Text('CLAPPY', {
 				fontFamily: 'Press Start 2P, Arial',
-				fontSize: baseFontSize,
+				fontSize: baseFontSize * TEXT_SIZES.TITLE,
 				fill: 0xffa500,
 				align: 'center',
 				padding: 4,
@@ -2274,55 +2334,54 @@ class Game {
 
 			const title2 = new PIXI.Text('CHEEKS!!', {
 				fontFamily: 'Press Start 2P, Arial',
-				fontSize: baseFontSize,
+				fontSize: baseFontSize * TEXT_SIZES.TITLE,
 				fill: 0xffa500,
 				align: 'center',
 				padding: 4,
 			})
 			title2.anchor.set(0.5)
-			title2.y = baseFontSize * 1.1
+			title2.y = baseFontSize * LAYOUT.TITLE_LINE_GAP
 			titleGroup.addChild(title2)
 
 			// Instructions
 			const instr1 = new PIXI.Text('3 ROUNDS PER MATCH', {
 				fontFamily: 'Press Start 2P, Arial',
-				fontSize: baseFontSize * 0.4,
+				fontSize: baseFontSize * TEXT_SIZES.SMALL,
 				fill: 0xffffff,
 				align: 'center',
 				padding: 4,
 			})
 			instr1.anchor.set(0.5)
-			instr1.y = baseFontSize * 2.8
+			instr1.y = baseFontSize * LAYOUT.INSTRUCTION_START
 			titleGroup.addChild(instr1)
 
 			const instr2 = new PIXI.Text('DODGE PUNCHES FOR POINTS', {
 				fontFamily: 'Press Start 2P, Arial',
-				fontSize: baseFontSize * 0.4,
+				fontSize: baseFontSize * TEXT_SIZES.SMALL,
 				fill: 0xffffff,
 				align: 'center',
 				padding: 4,
 			})
 			instr2.anchor.set(0.5)
-			instr2.y = baseFontSize * 3.4
+			instr2.y =
+				baseFontSize * (LAYOUT.INSTRUCTION_START + LAYOUT.INSTRUCTION_GAP)
 			titleGroup.addChild(instr2)
 
 			// Create press space group
 			const pressSpaceGroup = new PIXI.Container()
 			pressSpaceGroup.name = 'pressSpaceGroup'
-			pressSpaceGroup.y = baseFontSize * 4.8
+			pressSpaceGroup.y = baseFontSize * LAYOUT.PRESS_SPACE_OFFSET
 
 			// Create press space text
-			const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-			const pressText = new PIXI.Text(
-				isMobile ? 'TAP TO START' : 'PRESS SPACE',
-				{
-					fontFamily: 'Press Start 2P, Arial',
-					fontSize: baseFontSize * 0.5,
-					fill: 0xff0000,
-					align: 'center',
-					padding: 4,
-				}
-			)
+			const buttonText = isMobile ? 'TAP TO START' : 'PRESS SPACE'
+
+			const pressText = new PIXI.Text(buttonText, {
+				fontFamily: 'Press Start 2P',
+				fontSize: baseFontSize * TEXT_SIZES.MEDIUM,
+				fill: 0xff0000,
+				align: 'center',
+			})
+
 			pressText.anchor.set(0.5)
 			pressSpaceGroup.addChild(pressText)
 
@@ -2355,7 +2414,7 @@ class Game {
 	async drawCopyright(screenType = 'game') {
 		const width = this.screenWidth
 		const height = this.screenHeight
-		const baseFontSize = Math.min(height / 32, width / 38)
+		const baseFontSize = getBaseFontSize(width, height)
 
 		const copyrightText = window.cheatMode
 			? 'CHEAT MODE ACTIVATED'
@@ -2371,7 +2430,7 @@ class Game {
 
 		const copyright = await this.createText(copyrightText, {
 			fontFamily: 'Press Start 2P',
-			fontSize: baseFontSize,
+			fontSize: baseFontSize * TEXT_SIZES.TINY,
 			fill: color,
 			align: 'center',
 		})
@@ -2385,7 +2444,7 @@ class Game {
 
 			// Position at bottom of screen
 			copyrightContainer.x = width / 2
-			copyrightContainer.y = height - baseFontSize * 3
+			copyrightContainer.y = height - baseFontSize * LAYOUT.COPYRIGHT_BOTTOM
 
 			if (window.cheatMode) {
 				// Blinking effect for cheat mode - sync with other blink effects
