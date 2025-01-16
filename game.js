@@ -29,8 +29,8 @@ const LAYOUT = {
 const TEXT_SIZES = {
 	TITLE: 1.0, // Title text (e.g. "CLAPPY CHEEKS!!")
 	LARGE: 0.8, // Large text (e.g. "ROUND OVER!!")
-	MEDIUM: 0.5, // Medium text (e.g. "PRESS SPACE")
-	SMALL: 0.4, // Small text (e.g. instructions, score)
+	MEDIUM: 0.5, // Medium text (e.g. "instructions, PRESS SPACE")
+	SMALL: 0.35, // Small text (e.g. score)
 	TINY: 0.25, // Tiny text (e.g. copyright)
 }
 
@@ -1051,7 +1051,7 @@ class Game {
 
 		const knockout = await this.createText('KNOCKOUT!!', {
 			fontFamily: 'Press Start 2P',
-			fontSize: baseFontSize * TEXT_SIZES.TITLE,
+			fontSize: baseFontSize * TEXT_SIZES.LARGE,
 			fill: 0x000044,
 			align: 'center',
 		})
@@ -1062,18 +1062,40 @@ class Game {
 			contentGroup.addChild(knockout)
 		}
 
+		// Create score text first to get its dimensions
 		const finalScore = gameState.totalScore + gameState.score
 		const scoreText = await this.createText(`FINAL SCORE: ${finalScore}`, {
 			fontFamily: 'Press Start 2P',
-			fontSize: baseFontSize * TEXT_SIZES.LARGE,
+			fontSize: baseFontSize * TEXT_SIZES.MEDIUM,
 			fill: 0x000044,
 			align: 'center',
 		})
 
 		if (scoreText) {
+			// Create score container group
+			const scoreContainer = new PIXI.Container()
+
+			// Create white background box with padding
+			const padding = baseFontSize * LAYOUT.PADDING * 4 // More padding for emphasis
+			const boxWidth = scoreText.width + padding
+			const boxHeight = scoreText.height + padding * 0.7
+
+			const background = new PIXI.Graphics()
+			background.beginFill(0xffffff)
+			background.drawRect(-boxWidth / 2, -boxHeight / 2, boxWidth, boxHeight)
+			background.endFill()
+
+			// Add background and text to score container
+			scoreContainer.addChild(background)
+			scoreContainer.addChild(scoreText)
+
+			// Center the text
 			scoreText.anchor.set(0.5)
-			scoreText.y = baseFontSize * LAYOUT.LINE_HEIGHT
-			contentGroup.addChild(scoreText)
+
+			// Position the entire score container
+			scoreContainer.y = baseFontSize * LAYOUT.LINE_HEIGHT * 1.5
+
+			contentGroup.addChild(scoreContainer)
 		}
 
 		// Add content group to main container
@@ -1113,7 +1135,7 @@ class Game {
 		}
 
 		// Use consistent font size for score text
-		const scoreSize = baseFontSize * TEXT_SIZES.SMALL
+		const scoreSize = baseFontSize * TEXT_SIZES.MEDIUM
 		const scoreColor = 0x004643
 		const lineSpacing = scoreSize * LAYOUT.LINE_SPACING
 
@@ -2346,7 +2368,7 @@ class Game {
 			// Instructions
 			const instr1 = new PIXI.Text('3 ROUNDS PER MATCH', {
 				fontFamily: 'Press Start 2P, Arial',
-				fontSize: baseFontSize * TEXT_SIZES.SMALL,
+				fontSize: baseFontSize * TEXT_SIZES.MEDIUM,
 				fill: 0xffffff,
 				align: 'center',
 				padding: 4,
@@ -2357,7 +2379,7 @@ class Game {
 
 			const instr2 = new PIXI.Text('DODGE PUNCHES FOR POINTS', {
 				fontFamily: 'Press Start 2P, Arial',
-				fontSize: baseFontSize * TEXT_SIZES.SMALL,
+				fontSize: baseFontSize * TEXT_SIZES.MEDIUM,
 				fill: 0xffffff,
 				align: 'center',
 				padding: 4,
