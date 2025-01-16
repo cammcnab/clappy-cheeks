@@ -826,7 +826,30 @@ class Game {
 			if (!gameState.gameStarted) {
 				await this.drawTitleScreen()
 			} else if (gameState.gameOver) {
-				await this.drawGameOverScreen()
+				if (gameState.roundsLeft > 0) {
+					// Get screen dimensions
+					const width = this.screenWidth
+					const height = this.screenHeight
+
+					// Create container for round over content
+					const roundOverContainer = new PIXI.Container()
+					roundOverContainer.name = 'roundOverContainer'
+
+					// Calculate base font size based on screen dimensions
+					const baseFontSize = Math.min(height / 10, width / 14)
+
+					// Draw round over screen
+					await this.drawRoundOver(roundOverContainer, baseFontSize)
+
+					// Position and scale container
+					roundOverContainer.x = width / 2
+					roundOverContainer.y = height * 0.35
+
+					// Add to HUD
+					this.hud.addChild(roundOverContainer)
+				} else {
+					await this.drawGameOverScreen()
+				}
 			} else {
 				await this.drawGameHUD()
 			}
@@ -861,112 +884,16 @@ class Game {
 			// Calculate base font size based on screen dimensions
 			const baseFontSize = Math.min(height / 10, width / 14)
 
-			// Create text objects with validation
-			const roundScore = await this.createText(
-				`ROUND SCORE: ${gameState.score}`,
-				{
-					fontFamily: this.defaultTextStyle.fontFamily,
-					fontSize: baseFontSize * 0.8,
-					fill: 0x004643,
-					align: 'center',
-					padding: 4,
-				}
-			)
-
-			if (roundScore) {
-				roundScore.anchor.set(0.5)
-				roundScore.y = 0
-				gameOverContainer.addChild(roundScore)
-			}
-
-			const totalScore = await this.createText(
-				`TOTAL SCORE: ${gameState.totalScore}`,
-				{
-					fontFamily: this.defaultTextStyle.fontFamily,
-					fontSize: baseFontSize * 0.8,
-					fill: 0x004643,
-					align: 'center',
-					padding: 4,
-				}
-			)
-
-			if (totalScore) {
-				totalScore.anchor.set(0.5)
-				totalScore.y = baseFontSize * 1.2
-				gameOverContainer.addChild(totalScore)
-			}
-
-			// Show rounds left or game complete message
-			const roundsMessage =
-				gameState.roundsLeft > 0
-					? `${gameState.roundsLeft} ROUNDS LEFT`
-					: 'GAME COMPLETE!'
-
-			const roundsText = await this.createText(roundsMessage, {
-				fontFamily: this.defaultTextStyle.fontFamily,
-				fontSize: baseFontSize * 0.6,
-				fill: 0x004643,
-				align: 'center',
-				padding: 4,
-			})
-
-			if (roundsText) {
-				roundsText.anchor.set(0.5)
-				roundsText.y = baseFontSize * 2.4
-				gameOverContainer.addChild(roundsText)
-			}
-
-			// Add continue message with blink effect
-			const continueText = await this.createText(
-				gameState.roundsLeft > 0 ? 'TAP TO CONTINUE' : 'TAP TO RESTART',
-				{
-					fontFamily: this.defaultTextStyle.fontFamily,
-					fontSize: baseFontSize * 0.5,
-					fill: 0x004643,
-					align: 'center',
-					padding: 4,
-				}
-			)
-
-			if (continueText) {
-				continueText.anchor.set(0.5)
-				continueText.y = baseFontSize * 3.6
-
-				// Add blink effect
-				let visible = true
-				const blinkInterval = setInterval(() => {
-					visible = !visible
-					continueText.visible = visible
-				}, 500)
-
-				// Store interval for cleanup
-				continueText._blinkInterval = blinkInterval
-				gameOverContainer.addChild(continueText)
-			}
-
-			// Position and scale container
-			gameOverContainer.x = width / 2
-			gameOverContainer.y = height * 0.25
-
-			// Get bounds of content
-			const bounds = gameOverContainer.getBounds()
-			if (bounds && isFinite(bounds.width) && isFinite(bounds.height)) {
-				// Scale if needed
-				const scale = Math.min(
-					maxWidth / bounds.width,
-					maxHeight / bounds.height,
-					1
-				)
-				if (scale < 1) {
-					gameOverContainer.scale.set(scale)
-				}
+			if (gameState.roundsLeft > 0) {
+				// Draw round over screen
+				await this.drawRoundOver(gameOverContainer, baseFontSize)
+			} else {
+				// Draw final knockout screen
+				await this.drawFinalKnockout(gameOverContainer, baseFontSize)
 			}
 
 			// Add to HUD
 			this.hud.addChild(gameOverContainer)
-
-			// Draw copyright
-			await this.drawCopyright()
 
 			// Force a render update
 			this.app.renderer.render(this.app.stage)
@@ -984,6 +911,10 @@ class Game {
 				child._blinkTicker.stop()
 				child._blinkTicker.destroy()
 				child._blinkTicker = null
+			}
+			if (child._blinkHandler) {
+				this.app.ticker.remove(child._blinkHandler)
+				child._blinkHandler = null
 			}
 			if (child._animationFrameId) {
 				cancelAnimationFrame(child._animationFrameId)
@@ -1014,176 +945,209 @@ class Game {
 				child._blinkTicker.destroy()
 				child._blinkTicker = null
 			}
+			if (child._blinkHandler) {
+				this.app.ticker.remove(child._blinkHandler)
+				child._blinkHandler = null
+			}
+			if (child._moveHandler) {
+				this.app.ticker.remove(child._moveHandler)
+				child._moveHandler = null
+			}
 			if (child._animationFrameId) {
 				cancelAnimationFrame(child._animationFrameId)
 				child._animationFrameId = null
-				child._moveHandler = null
 			}
 			if (child instanceof PIXI.Text) {
 				child.destroy(true)
 			} else if (child instanceof PIXI.Container) {
+				// Recursively destroy container contents
 				this.destroyContainer(child)
 			} else {
 				child.destroy({ children: true, texture: true, baseTexture: true })
 			}
 			container.removeChild(child)
 		}
+
+		// Clean up container's own handlers
+		if (container._moveHandler) {
+			this.app.ticker.remove(container._moveHandler)
+			container._moveHandler = null
+		}
+		if (container._blinkHandler) {
+			this.app.ticker.remove(container._blinkHandler)
+			container._blinkHandler = null
+		}
+		if (container._animationFrameId) {
+			cancelAnimationFrame(container._animationFrameId)
+			container._animationFrameId = null
+		}
+
 		container.destroy({ children: true })
 	}
 
 	async drawFinalKnockout(mainContainer, baseFontSize) {
+		// Create a group for all content except copyright
+		const contentGroup = new PIXI.Container()
+
 		const knockout = await this.createText('KNOCKOUT!!', {
 			fontFamily: 'Press Start 2P',
 			fontSize: baseFontSize,
-			fill: 0x00005c,
+			fill: 0x000044,
 			align: 'center',
 		})
 
 		if (knockout) {
 			knockout.anchor.set(0.5)
 			knockout.y = 0
-			mainContainer.addChild(knockout)
+			contentGroup.addChild(knockout)
 		}
 
 		const finalScore = gameState.totalScore + gameState.score
 		const scoreText = `FINAL SCORE: ${finalScore}`
-		const scoreContainer = new PIXI.Graphics()
 		const scoreTextObj = await this.createText(scoreText, {
 			fontFamily: 'Press Start 2P',
 			fontSize: baseFontSize * 0.8,
-			fill: 0x000000,
+			fill: 0x000044,
 			align: 'center',
 		})
 
 		if (scoreTextObj) {
 			scoreTextObj.anchor.set(0.5)
 			scoreTextObj.y = baseFontSize * 1.5
-
-			// Add padding around score text
-			const padding = baseFontSize * 0.3
-			scoreContainer.beginFill(0xffffff)
-			scoreContainer.drawRect(
-				-scoreTextObj.width / 2 - padding,
-				scoreTextObj.y - scoreTextObj.height / 2 - padding / 2,
-				scoreTextObj.width + padding * 2,
-				scoreTextObj.height + padding
-			)
-
-			mainContainer.addChild(scoreContainer, scoreTextObj)
+			contentGroup.addChild(scoreTextObj)
 		}
+
+		// Add content group to main container
+		mainContainer.addChild(contentGroup)
+
+		// Center the main container like title screen
+		const bounds = contentGroup.getBounds()
+		mainContainer.position.set(
+			this.screenWidth / 2,
+			(this.screenHeight - bounds.height) / 2
+		)
+
+		// Draw copyright separately
+		await this.drawCopyright('game')
 	}
 
 	async drawRoundOver(mainContainer, baseFontSize) {
-		const roundOver1 = await this.createText('ROUND', {
+		// Hide game objects first
+		if (this.cheeks) this.cheeks.visible = false
+		if (this.gloves) this.gloves.visible = false
+
+		// Create a group for all content except copyright
+		const contentGroup = new PIXI.Container()
+
+		// Add "ROUND OVER!!" text
+		const roundOver = await this.createText('ROUND OVER!!', {
 			fontFamily: 'Press Start 2P',
-			fontSize: baseFontSize,
-			fill: 0x00005c,
+			fontSize: baseFontSize * 0.8,
+			fill: 0x000044,
 			align: 'center',
 		})
 
-		if (roundOver1) {
-			roundOver1.anchor.set(0.5)
-			roundOver1.y = 0
-			mainContainer.addChild(roundOver1)
+		if (roundOver) {
+			roundOver.anchor.set(0.5)
+			roundOver.y = 0
+			contentGroup.addChild(roundOver)
 		}
 
-		const roundOver2 = await this.createText('OVER!!', {
-			fontFamily: 'Press Start 2P',
-			fontSize: baseFontSize,
-			fill: 0x00005c,
-			align: 'center',
-		})
-
-		if (roundOver2) {
-			roundOver2.anchor.set(0.5)
-			roundOver2.y = baseFontSize * 1.2
-			mainContainer.addChild(roundOver2)
-		}
+		// Use consistent font size for score text (same as title screen instructions)
+		const scoreSize = baseFontSize * 0.4
+		const scoreColor = 0x004643 // Darker teal color
+		const lineSpacing = scoreSize * 1.2 // Tighter spacing
 
 		const roundScore = await this.createText(
 			`ROUND SCORE: ${gameState.score}`,
 			{
 				fontFamily: 'Press Start 2P',
-				fontSize: baseFontSize * 0.6,
-				fill: 0x004643,
+				fontSize: scoreSize,
+				fill: scoreColor,
 				align: 'center',
 			}
 		)
 
 		if (roundScore) {
 			roundScore.anchor.set(0.5)
-			roundScore.y = baseFontSize * 2.4
-			mainContainer.addChild(roundScore)
+			roundScore.y = baseFontSize * 1.3
+			contentGroup.addChild(roundScore)
 		}
 
 		const totalScoreText = await this.createText(
 			`TOTAL SCORE: ${gameState.totalScore + gameState.score}`,
 			{
 				fontFamily: 'Press Start 2P',
-				fontSize: baseFontSize * 0.6,
-				fill: 0x004643,
+				fontSize: scoreSize,
+				fill: scoreColor,
 				align: 'center',
 			}
 		)
 
 		if (totalScoreText) {
 			totalScoreText.anchor.set(0.5)
-			totalScoreText.y = baseFontSize * 3.2
-			mainContainer.addChild(totalScoreText)
+			totalScoreText.y = roundScore.y + lineSpacing
+			contentGroup.addChild(totalScoreText)
 		}
 
 		const roundsLeftText = await this.createText(
 			`ROUNDS LEFT: ${gameState.roundsLeft}`,
 			{
 				fontFamily: 'Press Start 2P',
-				fontSize: baseFontSize * 0.6,
-				fill: 0x004643,
+				fontSize: scoreSize,
+				fill: scoreColor,
 				align: 'center',
 			}
 		)
 
 		if (roundsLeftText) {
 			roundsLeftText.anchor.set(0.5)
-			roundsLeftText.y = baseFontSize * 4.0
-			mainContainer.addChild(roundsLeftText)
+			roundsLeftText.y = totalScoreText.y + lineSpacing
+			contentGroup.addChild(roundsLeftText)
 		}
 
 		// Check if mobile device
 		const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
-		const buttonText = isMobile ? 'TAP SCREEN' : 'PRESS SPACE'
+		const buttonText = isMobile ? 'TAP TO CONTINUE' : 'PRESS SPACE'
 
 		const pressSpace = await this.createText(buttonText, {
 			fontFamily: 'Press Start 2P',
-			fontSize: baseFontSize * 0.6,
+			fontSize: baseFontSize * 0.5,
 			fill: 0xff0000,
 			align: 'center',
 		})
 
 		if (pressSpace) {
 			pressSpace.anchor.set(0.5)
-			pressSpace.y = baseFontSize * 5.2
+			pressSpace.y = roundsLeftText.y + baseFontSize * 1.1
+			contentGroup.addChild(pressSpace)
 
-			// Set initial visibility based on knockout delay
-			pressSpace.alpha =
-				performance.now() - gameState.knockoutTime > KNOCKOUT_DELAY ? 1 : 0
-
-			// Create new blink ticker with cleanup
-			this._blinkTicker = new PIXI.Ticker()
-			this._blinkTicker.add(() => {
-				const time = performance.now()
-				if (time - gameState.knockoutTime > KNOCKOUT_DELAY) {
-					pressSpace.alpha = 1
-					// Match title screen blink rate of 250ms
-					const step = Math.floor(time / 250) % 2
-					pressSpace.style.fill = step ? 0xff0000 : 0xffffff
-				} else {
-					pressSpace.alpha = 0
+			// Add blink animation
+			const blinkHandler = () => {
+				if (!pressSpace.parent) {
+					this.app.ticker.remove(blinkHandler)
+					return
 				}
-			})
-			this._blinkTicker.start()
-
-			mainContainer.addChild(pressSpace)
+				const time = performance.now()
+				const step = Math.floor(time / 500) % 2
+				pressSpace.style.fill = step ? 0xff0000 : 0xffffff
+			}
+			this.app.ticker.add(blinkHandler)
+			pressSpace._blinkHandler = blinkHandler
 		}
+
+		// Add content group to main container
+		mainContainer.addChild(contentGroup)
+
+		// Center the main container like title screen
+		const bounds = contentGroup.getBounds()
+		mainContainer.position.set(
+			this.screenWidth / 2,
+			(this.screenHeight - bounds.height) / 2
+		)
+
+		// Draw copyright separately
+		await this.drawCopyright('round')
 	}
 
 	addDecorativeGloves(pressSpaceGroup, menuSize) {
@@ -1192,14 +1156,26 @@ class Game {
 			// Force a render update
 			this.app.renderer.render(this.app.stage)
 
-			// Fixed spacing based on menu size rather than text width
-			const gloveSize = menuSize * 2.5
-			const gloveSpacing = menuSize * 12
+			// Calculate glove size based on screen dimensions
+			const gloveSize = Math.min(this.screenWidth, this.screenHeight) * 0.12 // 12% of screen size
+			const minSpacing = pressSpaceGroup.width * 2.5 // Minimum space for text
+
+			// Calculate positions relative to screen edges
+			let leftX = -this.screenWidth / 4 // Position at 1/4 from left edge
+			let rightX = this.screenWidth / 4 // Position at 1/4 from right edge
+
+			// Ensure minimum text spacing is maintained
+			const actualSpacing = rightX - leftX
+			if (actualSpacing < minSpacing) {
+				const adjustment = (minSpacing - actualSpacing) / 2
+				leftX -= adjustment
+				rightX += adjustment
+			}
 
 			// Left glove
 			const leftGlove = new PIXI.Sprite(armTexture)
 			leftGlove.anchor.set(0.5)
-			leftGlove.x = -gloveSpacing / 2
+			leftGlove.x = leftX
 			leftGlove.y = 0
 			leftGlove.angle = 90
 			leftGlove.scale.x = -1
@@ -1209,7 +1185,7 @@ class Game {
 			// Right glove
 			const rightGlove = new PIXI.Sprite(armTexture)
 			rightGlove.anchor.set(0.5)
-			rightGlove.x = gloveSpacing / 2
+			rightGlove.x = rightX
 			rightGlove.y = 0
 			rightGlove.angle = -90
 			rightGlove.width = gloveSize
@@ -1217,27 +1193,38 @@ class Game {
 
 			pressSpaceGroup.addChild(leftGlove, rightGlove)
 
-			// Retro-style stepped movement with optimized handler
+			// Create animation handler with proper cleanup checks
 			const moveHandler = () => {
-				if (this.isIdle) return // Skip animation in idle state
+				// Check if container is still in the display list
+				if (!pressSpaceGroup.parent) {
+					this.app.ticker.remove(moveHandler)
+					return
+				}
+
+				if (this.isIdle) return
 
 				const time = performance.now()
-				const step = Math.floor(time / 250) % 2
-				const moveAmount = step ? BASE_UNIT * 0.8 : 0
+				const step = Math.floor(time / 500) % 2 // Slower blink
 
-				// Only update if position changed
-				if (leftGlove.x !== -gloveSpacing / 2 - moveAmount) {
-					leftGlove.x = -gloveSpacing / 2 - moveAmount
-					rightGlove.x = gloveSpacing / 2 + moveAmount
+				// Only update if objects still exist and are in the display list
+				if (pressSpaceGroup.children[0]?.style) {
+					pressSpaceGroup.children[0].style.fill = step ? 0xff0000 : 0xffffff
+				}
+
+				const moveAmount = step ? gloveSize * 0.15 : 0 // Slightly increased movement
+				if (leftGlove?.parent && rightGlove?.parent) {
+					leftGlove.x = leftX - moveAmount
+					rightGlove.x = rightX + moveAmount
 				}
 			}
 
+			// Add handler to ticker
 			this.app.ticker.add(moveHandler)
 			leftGlove._moveHandler = moveHandler
 
 			// Store initial positions for reset
-			leftGlove._baseX = -gloveSpacing / 2
-			rightGlove._baseX = gloveSpacing / 2
+			leftGlove._baseX = leftX
+			rightGlove._baseX = rightX
 		}
 	}
 
@@ -2329,115 +2316,21 @@ class Game {
 			// Add decorative gloves
 			const armTexture = PIXI.Assets.get('arm')
 			if (armTexture) {
-				// Calculate glove size based on screen dimensions
-				const gloveSize = Math.min(width, height) * 0.12 // 12% of screen size
-				const minSpacing = pressText.width * 2.5 // Minimum space for text
-
-				// Calculate positions relative to screen edges
-				let leftX = -width / 2 + gloveSize / 2 // Relative to center since pressSpaceGroup is centered
-				let rightX = width / 2 - gloveSize / 2
-
-				// Ensure minimum text spacing is maintained
-				const actualSpacing = rightX - leftX
-				if (actualSpacing < minSpacing) {
-					// Adjust positions to maintain minimum spacing
-					const adjustment = (minSpacing - actualSpacing) / 2
-					leftX -= adjustment
-					rightX += adjustment
-				}
-
-				// Left glove
-				const leftGlove = new PIXI.Sprite(armTexture)
-				leftGlove.anchor.set(0.5)
-				leftGlove.x = leftX
-				leftGlove.y = pressText.height / 40
-				leftGlove.angle = 90
-				leftGlove.scale.x = -1
-				leftGlove.width = gloveSize
-				leftGlove.height = (gloveSize / armTexture.width) * armTexture.height
-
-				// Right glove
-				const rightGlove = new PIXI.Sprite(armTexture)
-				rightGlove.anchor.set(0.5)
-				rightGlove.x = rightX
-				rightGlove.y = pressText.height / 40
-				rightGlove.angle = -90
-				rightGlove.width = gloveSize
-				rightGlove.height = (gloveSize / armTexture.width) * armTexture.height
-
-				pressSpaceGroup.addChild(leftGlove, rightGlove)
-
-				try {
-					// Create animation handler with proper cleanup checks
-					const moveHandler = () => {
-						// Check if container is still in the display list
-						if (!pressSpaceGroup.parent) {
-							if (pressSpaceGroup._animationFrameId) {
-								cancelAnimationFrame(pressSpaceGroup._animationFrameId)
-								pressSpaceGroup._animationFrameId = null
-							}
-							return
-						}
-
-						if (this.isIdle) return
-
-						const time = performance.now()
-						const step = Math.floor(time / 500) % 2 // Slower blink
-
-						// Only update if objects still exist and are in the display list
-						if (pressText?.parent && pressText.style) {
-							pressText.style.fill = step ? 0xff0000 : 0xffffff
-						}
-
-						const moveAmount = step ? gloveSize * 0.15 : 0 // Slightly increased movement
-						if (leftGlove?.parent && rightGlove?.parent) {
-							leftGlove.x = leftX - moveAmount
-							rightGlove.x = rightX + moveAmount
-						} else {
-							// If gloves are gone, stop animation
-							if (pressSpaceGroup._animationFrameId) {
-								cancelAnimationFrame(pressSpaceGroup._animationFrameId)
-								pressSpaceGroup._animationFrameId = null
-							}
-						}
-					}
-
-					// Store handler reference for cleanup
-					pressSpaceGroup._moveHandler = moveHandler
-
-					// Use requestAnimationFrame for smoother animation
-					let animationFrameId
-					const animate = () => {
-						if (!pressSpaceGroup.parent) {
-							cancelAnimationFrame(animationFrameId)
-							pressSpaceGroup._animationFrameId = null
-							return
-						}
-						moveHandler()
-						animationFrameId = requestAnimationFrame(animate)
-					}
-					animationFrameId = requestAnimationFrame(animate)
-
-					// Store animation frame ID for cleanup
-					pressSpaceGroup._animationFrameId = animationFrameId
-				} catch (error) {
-					console.warn('Failed to setup animation:', error)
-					// Continue without animation if it fails
-				}
+				this.addDecorativeGloves(pressSpaceGroup, baseFontSize)
 			}
 
 			titleGroup.addChild(pressSpaceGroup)
 			textContainer.addChild(titleGroup)
 
-			// Position and scale text container
-			textContainer.x = width / 2
-			textContainer.y = height * 0.25
+			// Center the container after all content is added
+			const bounds = titleGroup.getBounds()
+			textContainer.position.set(width / 2, (height - bounds.height) / 2)
 
 			// Add containers to HUD
 			this.hud.addChild(textContainer)
 
-			// Draw copyright
-			await this.drawCopyright()
+			// Draw copyright with title screen color
+			await this.drawCopyright('title')
 
 			console.log('Title screen drawing complete')
 		} catch (error) {
@@ -2446,26 +2339,27 @@ class Game {
 		}
 	}
 
-	async drawCopyright() {
+	async drawCopyright(screenType = 'game') {
 		const width = this.screenWidth
 		const height = this.screenHeight
-		const baseFontSize = Math.min(height / 32, width / 38) // Reduced size
+		const baseFontSize = Math.min(height / 32, width / 38)
 
 		const copyrightText = window.cheatMode
 			? 'CHEAT MODE ACTIVATED'
 			: 'NOT © 2024 FWD:FWD:FWD:'
 
-		// Use same color as round score text during game over screens
-		const textColor = gameState.gameOver
-			? 0x004643
-			: window.cheatMode
-			? 0xff0000
-			: 0x8888ff
+		// Different colors for different screens
+		let color = 0x004643 // default dark teal
+		if (window.cheatMode) {
+			color = 0xff0000
+		} else if (screenType === 'title') {
+			color = 0x8888ff // light blue for title screen
+		}
 
 		const copyright = await this.createText(copyrightText, {
-			fontFamily: this.defaultTextStyle.fontFamily,
+			fontFamily: 'Press Start 2P',
 			fontSize: baseFontSize,
-			fill: textColor,
+			fill: color,
 			align: 'center',
 		})
 
@@ -2480,19 +2374,17 @@ class Game {
 			copyrightContainer.x = width / 2
 			copyrightContainer.y = height - baseFontSize * 3
 
-			// Scale if needed
-			const bounds = copyrightContainer.getBounds()
-			const maxWidth = width * 0.9
-			const scale = Math.min(maxWidth / bounds.width, 1)
-			if (scale < 1) {
-				copyrightContainer.scale.set(scale)
-			}
-
 			if (window.cheatMode) {
 				// Blinking effect for cheat mode
-				this.app.ticker.add(() => {
+				const blinkHandler = () => {
+					if (!copyright.parent) {
+						this.app.ticker.remove(blinkHandler)
+						return
+					}
 					copyright.visible = Math.floor(performance.now() / 250) % 2
-				})
+				}
+				this.app.ticker.add(blinkHandler)
+				copyright._blinkHandler = blinkHandler
 			}
 
 			this.hud.addChild(copyrightContainer)
@@ -2551,7 +2443,7 @@ class Game {
 
 	updateGloves(delta) {
 		const speed =
-			GLOVE_SPEED * gameState.gameSpeed * delta * (this.screenWidth / 1000)
+			GLOVE_SPEED * gameState.gameSpeed * delta * (this.screenWidth / 1920) // Normalize to 1920px width
 
 		// Move existing gloves
 		this.gloves.pairs.forEach((pair) => {
@@ -2572,6 +2464,18 @@ class Game {
 		if (!lastPair || lastPair.x <= this.screenWidth * SPAWN_OFFSET) {
 			this.spawnGloves()
 		}
+	}
+
+	centerContentGroup(container) {
+		// Get the bounds of the container
+		const bounds = container.getBounds()
+
+		// Calculate absolute center position
+		const x = (this.screenWidth - bounds.width) / 2
+		const y = (this.screenHeight - bounds.height) / 2
+
+		// Set position
+		container.position.set(x, y)
 	}
 }
 
