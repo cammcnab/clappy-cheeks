@@ -1157,26 +1157,18 @@ class Game {
 			this.app.renderer.render(this.app.stage)
 
 			// Calculate glove size based on screen dimensions
-			const gloveSize = Math.min(this.screenWidth, this.screenHeight) * 0.12 // 12% of screen size
-			const minSpacing = pressSpaceGroup.width * 2.5 // Minimum space for text
+			const gloveSize = Math.min(this.screenHeight, this.screenWidth) * 0.1
 
-			// Calculate positions relative to screen edges
-			let leftX = -this.screenWidth / 4 // Position at 1/4 from left edge
-			let rightX = this.screenWidth / 4 // Position at 1/4 from right edge
-
-			// Ensure minimum text spacing is maintained
-			const actualSpacing = rightX - leftX
-			if (actualSpacing < minSpacing) {
-				const adjustment = (minSpacing - actualSpacing) / 2
-				leftX -= adjustment
-				rightX += adjustment
-			}
+			// Calculate positions to pin to edges with small padding
+			const edgePadding = this.screenWidth * 0.22
+			let leftX = -this.screenWidth / 1.5 + edgePadding
+			let rightX = this.screenWidth / 1.5 - edgePadding
 
 			// Left glove
 			const leftGlove = new PIXI.Sprite(armTexture)
 			leftGlove.anchor.set(0.5)
 			leftGlove.x = leftX
-			leftGlove.y = 0
+			leftGlove.y = -(gloveSize * 0.05)
 			leftGlove.angle = 90
 			leftGlove.scale.x = -1
 			leftGlove.width = gloveSize
@@ -1186,7 +1178,7 @@ class Game {
 			const rightGlove = new PIXI.Sprite(armTexture)
 			rightGlove.anchor.set(0.5)
 			rightGlove.x = rightX
-			rightGlove.y = 0
+			rightGlove.y = -(gloveSize * 0.05)
 			rightGlove.angle = -90
 			rightGlove.width = gloveSize
 			rightGlove.height = (gloveSize / armTexture.width) * armTexture.height
@@ -2296,7 +2288,7 @@ class Game {
 			// Create press space group
 			const pressSpaceGroup = new PIXI.Container()
 			pressSpaceGroup.name = 'pressSpaceGroup'
-			pressSpaceGroup.y = baseFontSize * 4.5
+			pressSpaceGroup.y = baseFontSize * 4.8
 
 			// Create press space text
 			const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
