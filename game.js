@@ -2329,14 +2329,28 @@ class Game {
 			// Add decorative gloves
 			const armTexture = PIXI.Assets.get('arm')
 			if (armTexture) {
-				const gloveSize = baseFontSize * 1.5
-				const gloveSpacing = pressText.width * 1.5
+				// Calculate glove size based on screen dimensions
+				const gloveSize = Math.min(width, height) * 0.12 // 12% of screen size
+				const minSpacing = pressText.width * 2.5 // Minimum space for text
+
+				// Calculate positions relative to screen edges
+				let leftX = -width / 2 + gloveSize / 2 // Relative to center since pressSpaceGroup is centered
+				let rightX = width / 2 - gloveSize / 2
+
+				// Ensure minimum text spacing is maintained
+				const actualSpacing = rightX - leftX
+				if (actualSpacing < minSpacing) {
+					// Adjust positions to maintain minimum spacing
+					const adjustment = (minSpacing - actualSpacing) / 2
+					leftX -= adjustment
+					rightX += adjustment
+				}
 
 				// Left glove
 				const leftGlove = new PIXI.Sprite(armTexture)
 				leftGlove.anchor.set(0.5)
-				leftGlove.x = -gloveSpacing / 2
-				leftGlove.y = pressText.height / 4
+				leftGlove.x = leftX
+				leftGlove.y = pressText.height / 40
 				leftGlove.angle = 90
 				leftGlove.scale.x = -1
 				leftGlove.width = gloveSize
@@ -2345,8 +2359,8 @@ class Game {
 				// Right glove
 				const rightGlove = new PIXI.Sprite(armTexture)
 				rightGlove.anchor.set(0.5)
-				rightGlove.x = gloveSpacing / 2
-				rightGlove.y = pressText.height / 4
+				rightGlove.x = rightX
+				rightGlove.y = pressText.height / 40
 				rightGlove.angle = -90
 				rightGlove.width = gloveSize
 				rightGlove.height = (gloveSize / armTexture.width) * armTexture.height
@@ -2375,10 +2389,10 @@ class Game {
 							pressText.style.fill = step ? 0xff0000 : 0xffffff
 						}
 
-						const moveAmount = step ? gloveSize * 0.2 : 0
+						const moveAmount = step ? gloveSize * 0.15 : 0 // Slightly increased movement
 						if (leftGlove?.parent && rightGlove?.parent) {
-							leftGlove.x = -gloveSpacing / 2 - moveAmount
-							rightGlove.x = gloveSpacing / 2 + moveAmount
+							leftGlove.x = leftX - moveAmount
+							rightGlove.x = rightX + moveAmount
 						} else {
 							// If gloves are gone, stop animation
 							if (pressSpaceGroup._animationFrameId) {
