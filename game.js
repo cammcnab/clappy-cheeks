@@ -2505,7 +2505,18 @@ class Game {
 		}, 100)
 
 		// Update HUD to show cheat mode
-		this.updateHUD()
+		if (!gameState.gameStarted) {
+			// If we're on the title screen, redraw it
+			this.clearGameOverScreen()
+			this.drawTitleScreen().then((titleScreen) => {
+				if (titleScreen) {
+					this.hud.addChild(titleScreen)
+				}
+			})
+		} else {
+			// If we're in game, just update the HUD
+			this.updateHUD()
+		}
 	}
 
 	createBackground() {
