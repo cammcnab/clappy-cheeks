@@ -64,7 +64,7 @@ const ASSETS = {
 	textures: {
 		cheeks: './images/cheeks.png',
 		arm: './images/arm.png',
-		crowd: './images/crowd.png',
+		crowd: './images/crowd-fade.png',
 	},
 	fonts: {
 		pressStart2P: './fonts/PressStart2P-Regular.css',
@@ -651,29 +651,33 @@ class Game {
 		// Clear any existing graphics
 		graphics.clear()
 
-		// Fill entire canvas with blue background
-		graphics.beginFill(0x000044, 1)
+		// Use different background color based on game state
+		const bgColor = gameState.gameStarted ? 0x4b2f2f : 0x000044 // Darker shade of ring floor during gameplay
+		graphics.beginFill(bgColor, 1)
 		graphics.drawRect(0, 0, width, height)
 		graphics.endFill()
 
-		// Draw grid lines with higher alpha for better visibility
-		graphics.lineStyle(1, 0x4444ff, 0.3)
+		// Only draw grid lines when game hasn't started
+		if (!gameState.gameStarted) {
+			// Draw grid lines with higher alpha for better visibility
+			graphics.lineStyle(1, 0x4444ff, 0.3)
 
-		// Draw horizontal lines
-		const gridSpacing = height * 0.05 // 5% of canvas height
-		const horizontalLines = Math.ceil(height / gridSpacing) + 1
-		for (let i = 0; i <= horizontalLines; i++) {
-			const y = i * gridSpacing
-			graphics.moveTo(0, y)
-			graphics.lineTo(width, y)
-		}
+			// Draw horizontal lines
+			const gridSpacing = height * 0.05 // 5% of canvas height
+			const horizontalLines = Math.ceil(height / gridSpacing) + 1
+			for (let i = 0; i <= horizontalLines; i++) {
+				const y = i * gridSpacing
+				graphics.moveTo(0, y)
+				graphics.lineTo(width, y)
+			}
 
-		// Draw vertical lines
-		const verticalLines = Math.ceil(width / gridSpacing) + 1
-		for (let i = 0; i <= verticalLines; i++) {
-			const x = i * gridSpacing
-			graphics.moveTo(x, 0)
-			graphics.lineTo(x, height)
+			// Draw vertical lines
+			const verticalLines = Math.ceil(width / gridSpacing) + 1
+			for (let i = 0; i <= verticalLines; i++) {
+				const x = i * gridSpacing
+				graphics.moveTo(x, 0)
+				graphics.lineTo(x, height)
+			}
 		}
 	}
 
@@ -1934,94 +1938,92 @@ class Game {
 		const width = this.screenWidth
 		const height = this.screenHeight
 
-		// 1. Blue background
-		const blueBackground = new PIXI.Graphics()
-		blueBackground.beginFill(0x000044, 1)
-		blueBackground.drawRect(0, 0, width, height)
-		blueBackground.endFill()
-		this.background.addChild(blueBackground)
+		// 1. Background color based on game state
+		const bgGraphics = new PIXI.Graphics()
+		const bgColor = gameState.gameStarted ? 0x002321 : 0x000044 // Darker version of 0x004643
+		bgGraphics.beginFill(bgColor, 1)
+		bgGraphics.drawRect(0, 0, width, height)
+		bgGraphics.endFill()
+		this.background.addChild(bgGraphics)
 
-		// 2. Grid pattern
-		const gridGraphics = new PIXI.Graphics()
-		gridGraphics.lineStyle(1, 0x4444ff, 0.3)
+		// 2. Grid pattern - only show when game hasn't started
+		if (!gameState.gameStarted) {
+			const gridGraphics = new PIXI.Graphics()
+			gridGraphics.lineStyle(1, 0x4444ff, 0.3)
 
-		// Draw grid lines - fixed size grid that tiles from center
-		const gridSize = 32 // Fixed grid size
+			// Draw grid lines - fixed size grid that tiles from center
+			const gridSize = 32 // Fixed grid size
 
-		// Calculate grid offsets to center the pattern
-		const centerX = width / 2
-		const centerY = height / 2
-		const startX = (centerX % gridSize) - gridSize / 2
-		const startY = (centerY % gridSize) - gridSize / 2
+			// Calculate grid offsets to center the pattern
+			const centerX = width / 2
+			const centerY = height / 2
+			const startX = (centerX % gridSize) - gridSize / 2
+			const startY = (centerY % gridSize) - gridSize / 2
 
-		// Calculate maximum distortion at corners (as percentage of screen size)
-		const maxDistortion = Math.min(width, height) * 0.15
+			// Calculate maximum distortion at corners (as percentage of screen size)
+			const maxDistortion = Math.min(width, height) * 0.15
 
-		// Draw horizontal curved lines from center
-		for (let y = startY; y <= height; y += gridSize) {
-			gridGraphics.moveTo(0, y)
-			// Calculate distortion based on distance from center
-			const distFromCenter = Math.abs(y - centerY) / height
-			const curveHeight = maxDistortion * distFromCenter * distFromCenter
-			// Mirror the curve direction based on which side of center we're on
-			const direction = y < centerY ? -1 : 1
-			gridGraphics.bezierCurveTo(
-				width * 0.25,
-				y + curveHeight * direction, // First control point
-				width * 0.75,
-				y + curveHeight * direction, // Second control point
-				width,
-				y // End point
-			)
+			// Draw horizontal curved lines from center
+			for (let y = startY; y <= height; y += gridSize) {
+				gridGraphics.moveTo(0, y)
+				const distFromCenter = Math.abs(y - centerY) / height
+				const curveHeight = maxDistortion * distFromCenter * distFromCenter
+				const direction = y < centerY ? -1 : 1
+				gridGraphics.bezierCurveTo(
+					width * 0.25,
+					y + curveHeight * direction,
+					width * 0.75,
+					y + curveHeight * direction,
+					width,
+					y
+				)
+			}
+			for (let y = startY - gridSize; y >= 0; y -= gridSize) {
+				gridGraphics.moveTo(0, y)
+				const distFromCenter = Math.abs(y - centerY) / height
+				const curveHeight = maxDistortion * distFromCenter * distFromCenter
+				const direction = y < centerY ? -1 : 1
+				gridGraphics.bezierCurveTo(
+					width * 0.25,
+					y + curveHeight * direction,
+					width * 0.75,
+					y + curveHeight * direction,
+					width,
+					y
+				)
+			}
+
+			// Draw vertical curved lines
+			for (let x = startX; x <= width; x += gridSize) {
+				gridGraphics.moveTo(x, 0)
+				const distFromCenter = Math.abs(x - centerX) / width
+				const curveWidth = maxDistortion * distFromCenter * distFromCenter
+				const direction = x < centerX ? -1 : 1
+				gridGraphics.bezierCurveTo(
+					x + curveWidth * direction,
+					height * 0.25,
+					x + curveWidth * direction,
+					height * 0.75,
+					x,
+					height
+				)
+			}
+			for (let x = startX - gridSize; x >= 0; x -= gridSize) {
+				gridGraphics.moveTo(x, 0)
+				const distFromCenter = Math.abs(x - centerX) / width
+				const curveWidth = maxDistortion * distFromCenter * distFromCenter
+				const direction = x < centerX ? -1 : 1
+				gridGraphics.bezierCurveTo(
+					x + curveWidth * direction,
+					height * 0.25,
+					x + curveWidth * direction,
+					height * 0.75,
+					x,
+					height
+				)
+			}
+			this.background.addChild(gridGraphics)
 		}
-		for (let y = startY - gridSize; y >= 0; y -= gridSize) {
-			gridGraphics.moveTo(0, y)
-			const distFromCenter = Math.abs(y - centerY) / height
-			const curveHeight = maxDistortion * distFromCenter * distFromCenter
-			// Mirror the curve direction based on which side of center we're on
-			const direction = y < centerY ? -1 : 1
-			gridGraphics.bezierCurveTo(
-				width * 0.25,
-				y + curveHeight * direction,
-				width * 0.75,
-				y + curveHeight * direction,
-				width,
-				y
-			)
-		}
-
-		// Draw vertical curved lines
-		for (let x = startX; x <= width; x += gridSize) {
-			gridGraphics.moveTo(x, 0)
-			const distFromCenter = Math.abs(x - centerX) / width
-			const curveWidth = maxDistortion * distFromCenter * distFromCenter
-			// Mirror the curve direction based on which side of center we're on
-			const direction = x < centerX ? -1 : 1
-			gridGraphics.bezierCurveTo(
-				x + curveWidth * direction,
-				height * 0.25, // First control point
-				x + curveWidth * direction,
-				height * 0.75, // Second control point
-				x,
-				height // End point
-			)
-		}
-		for (let x = startX - gridSize; x >= 0; x -= gridSize) {
-			gridGraphics.moveTo(x, 0)
-			const distFromCenter = Math.abs(x - centerX) / width
-			const curveWidth = maxDistortion * distFromCenter * distFromCenter
-			// Mirror the curve direction based on which side of center we're on
-			const direction = x < centerX ? -1 : 1
-			gridGraphics.bezierCurveTo(
-				x + curveWidth * direction,
-				height * 0.25,
-				x + curveWidth * direction,
-				height * 0.75,
-				x,
-				height
-			)
-		}
-		this.background.addChild(gridGraphics)
 
 		// Only show ring and crowd during gameplay or game over
 		if (gameState.gameStarted || gameState.gameOver) {
@@ -2037,17 +2039,38 @@ class Game {
 				const scale = crowdHeight / crowdTexture.height
 				const scaledWidth = crowdTexture.width * scale
 
-				// Create crowd sprite to fill width
-				this.crowd = new PIXI.TilingSprite(crowdTexture, width, crowdHeight)
+				// Create crowd container for masking
+				const crowdContainer = new PIXI.Container()
 
-				// Position at top of screen
+				// Create crowd sprite
+				this.crowd = new PIXI.TilingSprite(crowdTexture, width, crowdHeight)
 				this.crowd.position.set(0, 0)
 				this.crowd.tileScale.set(scale)
-				this.crowd.alpha = 0.6
+				this.crowd.alpha = 0.2
+				this.crowd.blendMode = PIXI.BLEND_MODES.LIGHTEN
 
-				// Insert crowd behind ring in the display list
+				// Create gradient mask
+				const gradientMask = new PIXI.Graphics()
+				gradientMask.beginFill(0xffffff, 1)
+				gradientMask.drawRect(0, 0, width, crowdHeight * 0.8) // Solid part
+
+				// Draw gradient part
+				const gradientHeight = crowdHeight * 0.2
+				for (let i = 0; i < gradientHeight; i++) {
+					const alpha = 1 - i / gradientHeight
+					gradientMask.beginFill(0xffffff, alpha)
+					gradientMask.drawRect(0, crowdHeight * 0.8 + i, width, 1)
+					gradientMask.endFill()
+				}
+
+				// Add crowd and mask to container
+				crowdContainer.addChild(this.crowd)
+				crowdContainer.mask = gradientMask
+				crowdContainer.addChild(gradientMask) // Add mask as child to ensure it's rendered
+
+				// Insert crowd container behind ring
 				this.background.addChildAt(
-					this.crowd,
+					crowdContainer,
 					this.background.getChildIndex(this.ring)
 				)
 			}
