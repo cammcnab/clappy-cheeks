@@ -9,6 +9,7 @@ const KNOCKOUT_DELAY = 1500
 const SPEED_INCREASE = 0.08
 const MAX_SPEED = 2
 const SQUISH_DURATION = 100
+const MIN_LOADING_TIME = 3000 // Minimum loading time in milliseconds
 
 // Global mobile check - using more comprehensive detection
 const isMobile = (function () {
@@ -90,6 +91,7 @@ const gameState = {
 	squishStartTime: 0,
 	firstAction: false,
 	hasEverActed: false,
+	isLoading: true, // Add loading state
 }
 
 // Audio state
@@ -254,69 +256,38 @@ class Game {
 		// Set up container hierarchy
 		this.gameContainer.addChild(this.background)
 		this.gameContainer.addChild(this.gameLayer)
-		// Don't add gloves yet - will be added after initialization
 		this.uiContainer.addChild(this.hud)
+
+		// Set initial screen dimensions
+		this.screenWidth = this.app.screen.width
+		this.screenHeight = this.app.screen.height
 
 		// Initialize screen-relative constants
 		this.updateScreenConstants()
 
-		// Add resize handler
+		// Set initial container positions and scales
+		this.gameContainer.scale.set(1)
+		this.gameContainer.position.set(0, 0)
+		this.uiContainer.scale.set(1)
+		this.uiContainer.position.set(0, 0)
+
+		// Initialize filters
+		this.initializeFilters()
+
+		// Add resize handler for actual window resize events
 		window.addEventListener('resize', () => {
 			this.handleResize()
 		})
 
-		// Initial resize to set up layout
-		this.handleResize()
-
-		// Show loading screen immediately
-		this.showQuickStartScreen()
-
-		// Initialize game after font loads
-		this.initializeGame()
-
-		// Start game loop
-		this.app.ticker.add((delta) => this.gameLoop(delta))
+		// Load font first, then show loading screen
+		this.loadFonts().then(() => {
+			this.showQuickStartScreen()
+			// Initialize game after loading screen is shown
+			this.initializeGame()
+		})
 	}
 
-	showQuickStartScreen() {
-		// Clear any existing HUD content
-		this.hud.removeChildren()
-
-		// Hide player and gloves during loading screen
-		if (this.gloves) {
-			this.gloves.visible = false
-		}
-		if (this.cheeks) {
-			this.cheeks.visible = false
-		}
-
-		const width = this.app.screen.width
-		const height = this.app.screen.height
-		const fontSize = getBaseFontSize(width, height, { widthDivisor: 20 })
-
-		// Create loading text
-		const loadingText = new PIXI.Text('LOADING...', {
-			fontFamily: 'Press Start 2P',
-			fontSize: fontSize * TEXT_SIZES.LARGE,
-			fill: 0xffffff,
-			align: 'center',
-		})
-
-		// Center the text
-		loadingText.anchor.set(0.5)
-		loadingText.x = width / 2
-		loadingText.y = height / 2
-
-		// Add to HUD
-		this.hud.addChild(loadingText)
-
-		// Store reference to remove later
-		this.loadingText = loadingText
-
-		// Create background
-		this.createBackground()
-
-		// Initialize filters immediately
+	initializeFilters() {
 		try {
 			console.log('Initializing filters...')
 			if (!window.PIXI || !window.PIXI.filters) {
@@ -361,22 +332,164 @@ class Game {
 			this.bloomFilter = null
 			this.crtFilter = null
 		}
+	}
 
-		// Initialize audio only after user interaction
-		const initAudioOnInteraction = () => {
-			if (
-				PIXI.sound &&
-				PIXI.sound.context &&
-				PIXI.sound.context.state === 'suspended'
-			) {
-				PIXI.sound.context.resume()
-			}
-			document.removeEventListener('click', initAudioOnInteraction)
-			document.removeEventListener('touchstart', initAudioOnInteraction)
+	showQuickStartScreen() {
+		// Clear any existing HUD content
+		this.hud.removeChildren()
+
+		// Create main container for loading screen content
+		const loadingContainer = new PIXI.Container()
+		loadingContainer.name = 'loadingContainer'
+
+		// Create background container
+		const bgContainer = new PIXI.Container()
+		this.loadingBackground = bgContainer // Store reference for resize
+
+		// Create the blue background with grid
+		const bgGraphics = new PIXI.Graphics()
+		this.updateLoadingBackground(bgGraphics)
+		bgContainer.addChild(bgGraphics)
+
+		// Create text container for loading text and progress
+		const textContainer = new PIXI.Container()
+		textContainer.name = 'loadingTextContainer'
+
+		const fontSize = getBaseFontSize(this.screenWidth, this.screenHeight, {
+			widthDivisor: 20,
+		})
+
+		// Create loading text
+		const loadingText = new PIXI.Text('LOADING', {
+			fontFamily: 'Press Start 2P',
+			fontSize: fontSize * TEXT_SIZES.LARGE,
+			fill: 0xffffff,
+			align: 'center',
+		})
+
+		// Center the text
+		loadingText.anchor.set(0.5)
+		loadingText.y = -fontSize
+
+		// Create progress bar text
+		const progressText = new PIXI.Text('----------', {
+			fontFamily: 'Press Start 2P',
+			fontSize: fontSize * TEXT_SIZES.LARGE,
+			fill: 0xffffff,
+			align: 'center',
+		})
+
+		// Center the progress bar
+		progressText.anchor.set(0.5)
+		progressText.y = 0
+
+		// Add texts to text container
+		textContainer.addChild(loadingText)
+		textContainer.addChild(progressText)
+
+		// Center text container
+		textContainer.position.set(this.screenWidth / 2, this.screenHeight / 2)
+
+		// Add containers to main loading container
+		loadingContainer.addChild(bgContainer)
+		loadingContainer.addChild(textContainer)
+
+		// Add to HUD
+		this.hud.addChild(loadingContainer)
+
+		// Store references to remove later
+		this.loadingText = loadingText
+		this.progressText = progressText
+		this.loadingContainer = loadingContainer
+		this.loadingTextContainer = textContainer
+	}
+
+	updateLoadingBackground(graphics) {
+		const width = this.screenWidth
+		const height = this.screenHeight
+
+		// Clear any existing graphics
+		graphics.clear()
+
+		// Draw background
+		graphics.beginFill(0x000044, 1)
+		graphics.drawRect(0, 0, width, height)
+		graphics.endFill()
+
+		// Draw grid lines
+		graphics.lineStyle(1, 0x4444ff, 0.3)
+
+		// Draw grid lines - fixed size grid that tiles from center
+		const gridSize = 32 // Fixed grid size
+
+		// Calculate grid offsets to center the pattern
+		const centerX = width / 2
+		const centerY = height / 2
+		const startX = (centerX % gridSize) - gridSize / 2
+		const startY = (centerY % gridSize) - gridSize / 2
+
+		// Calculate maximum distortion at corners
+		const maxDistortion = Math.min(width, height) * 0.15
+
+		// Draw horizontal curved lines from center
+		for (let y = startY; y <= height; y += gridSize) {
+			graphics.moveTo(0, y)
+			const distFromCenter = Math.abs(y - centerY) / height
+			const curveHeight = maxDistortion * distFromCenter * distFromCenter
+			const direction = y < centerY ? -1 : 1
+			graphics.bezierCurveTo(
+				width * 0.25,
+				y + curveHeight * direction,
+				width * 0.75,
+				y + curveHeight * direction,
+				width,
+				y
+			)
+		}
+		for (let y = startY - gridSize; y >= 0; y -= gridSize) {
+			graphics.moveTo(0, y)
+			const distFromCenter = Math.abs(y - centerY) / height
+			const curveHeight = maxDistortion * distFromCenter * distFromCenter
+			const direction = y < centerY ? -1 : 1
+			graphics.bezierCurveTo(
+				width * 0.25,
+				y + curveHeight * direction,
+				width * 0.75,
+				y + curveHeight * direction,
+				width,
+				y
+			)
 		}
 
-		document.addEventListener('click', initAudioOnInteraction)
-		document.addEventListener('touchstart', initAudioOnInteraction)
+		// Draw vertical curved lines
+		for (let x = startX; x <= width; x += gridSize) {
+			graphics.moveTo(x, 0)
+			const distFromCenter = Math.abs(x - centerX) / width
+			const curveWidth = maxDistortion * distFromCenter * distFromCenter
+			const direction = x < centerX ? -1 : 1
+			graphics.bezierCurveTo(
+				x + curveWidth * direction,
+				height * 0.25,
+				x + curveWidth * direction,
+				height * 0.75,
+				x,
+				height
+			)
+		}
+		for (let x = startX - gridSize; x >= 0; x -= gridSize) {
+			graphics.moveTo(x, 0)
+			const distFromCenter = Math.abs(x - centerX) / width
+			const curveWidth = maxDistortion * distFromCenter * distFromCenter
+			const direction = x < centerX ? -1 : 1
+			graphics.bezierCurveTo(
+				x + curveWidth * direction,
+				height * 0.25,
+				x + curveWidth * direction,
+				height * 0.75,
+				x,
+				height
+			)
+		}
 	}
 
 	updateScreenConstants() {
@@ -394,6 +507,10 @@ class Game {
 		const parent = this.app.view.parentElement
 		const parentWidth = parent.clientWidth
 		const parentHeight = parent.clientHeight
+
+		// Store previous dimensions for relative positioning
+		const prevWidth = this.screenWidth
+		const prevHeight = this.screenHeight
 
 		// Update app renderer size to match parent exactly
 		this.app.renderer.resize(parentWidth, parentHeight)
@@ -413,56 +530,137 @@ class Game {
 		this.uiContainer.scale.set(1)
 		this.uiContainer.position.set(0, 0)
 
-		// Force immediate background update
-		this.createBackground()
+		// If we're loading, only update the loading screen
+		if (gameState.isLoading) {
+			if (this.loadingBackground) {
+				const bgGraphics = this.loadingBackground.children[0]
+				if (bgGraphics instanceof PIXI.Graphics) {
+					this.updateLoadingBackground(bgGraphics)
+				}
+			}
 
-		// Ensure all animations are stopped and cleaned up before updating HUD
-		this.clearGameOverScreen()
+			if (this.loadingTextContainer) {
+				const fontSize = getBaseFontSize(this.screenWidth, this.screenHeight, {
+					widthDivisor: 20,
+				})
 
-		// Add a small delay before redrawing to ensure cleanup is complete
-		setTimeout(() => {
-			// Update HUD for current game state
-			this.updateHUD()
-
-			// Update game objects if game is running
-			if (gameState.gameStarted && !gameState.gameOver) {
-				if (this.cheeks) {
-					// Keep cheeks at same relative position
-					const relativeX = this.cheeks.x / this.screenWidth
-					const relativeY = this.cheeks.y / this.screenHeight
-					this.cheeks.x = this.screenWidth * relativeX
-					this.cheeks.y = this.screenHeight * relativeY
-
-					// Update cheeks scale
-					const targetSize = CHEEKS_SIZE
-					const cheeksTexture = PIXI.Assets.get('cheeks')
-					if (cheeksTexture && cheeksTexture.valid) {
-						const baseScale =
-							targetSize / Math.max(cheeksTexture.width, cheeksTexture.height)
-						this.cheeks.scale.set(baseScale)
-					}
+				// Update loading text position and size
+				if (this.loadingText) {
+					this.loadingText.style.fontSize = fontSize * TEXT_SIZES.LARGE
+				}
+				if (this.progressText) {
+					this.progressText.style.fontSize = fontSize * TEXT_SIZES.LARGE
 				}
 
-				if (this.gloves) {
-					// Update glove positions and scales
-					this.gloves.pairs.forEach((pair) => {
-						const relativeX = pair.x / this.screenWidth
-						pair.x = this.screenWidth * relativeX
-
-						// Update glove scales
-						pair.children.forEach((glove) => {
-							if (glove instanceof PIXI.Sprite) {
-								glove.width = ARM_SCALE
-								glove.scale.y = glove.scale.x
-							}
-						})
-					})
-				}
+				// Center the text container
+				this.loadingTextContainer.position.set(
+					this.screenWidth / 2,
+					this.screenHeight / 2
+				)
 			}
 
 			// Force a render update
 			this.app.renderer.render(this.app.stage)
-		}, 50) // Small delay to ensure cleanup is complete
+			return
+		}
+
+		// Clear existing HUD content
+		this.clearGameOverScreen()
+
+		// Update background
+		this.createBackground()
+
+		// Update game objects if game is running
+		if (gameState.gameStarted && !gameState.gameOver) {
+			if (this.cheeks) {
+				// Keep cheeks at same relative X position and update scale
+				const relativeX = PLAYER_X
+				this.cheeks.x = this.screenWidth * relativeX
+
+				// Keep vertical position relative to screen height
+				const relativeY = this.cheeks.y / prevHeight
+				this.cheeks.y = this.screenHeight * relativeY
+
+				// Update cheeks scale
+				const targetSize = CHEEKS_SIZE
+				const cheeksTexture = PIXI.Assets.get('cheeks')
+				if (cheeksTexture && cheeksTexture.valid) {
+					const baseScale =
+						targetSize / Math.max(cheeksTexture.width, cheeksTexture.height)
+					this.cheeks.scale.set(baseScale)
+				}
+			}
+
+			if (this.gloves) {
+				// Update glove positions and scales
+				this.gloves.pairs.forEach((pair) => {
+					// Keep relative X position
+					const relativeX = pair.x / prevWidth
+					pair.x = this.screenWidth * relativeX
+
+					// Keep gap position relative to screen height
+					if (pair.gapY) {
+						const relativeY = pair.gapY / prevHeight
+						pair.gapY = this.screenHeight * relativeY
+					}
+
+					// Update glove scales and positions
+					pair.children.forEach((glove, index) => {
+						if (glove instanceof PIXI.Sprite) {
+							glove.width = ARM_SCALE
+							glove.scale.y = glove.scale.x
+
+							// Update vertical positions relative to gap
+							if (pair.gapY) {
+								if (index === 0) {
+									// Top glove
+									glove.y = pair.gapY - GLOVE_OPENING / 2
+								} else {
+									// Bottom glove
+									glove.y = pair.gapY + GLOVE_OPENING / 2
+								}
+							}
+						}
+					})
+				})
+			}
+		}
+
+		// Redraw appropriate screen based on game state
+		if (!gameState.gameStarted) {
+			// Title screen
+			this.drawTitleScreen().then((titleScreen) => {
+				if (titleScreen) {
+					this.hud.addChild(titleScreen)
+				}
+			})
+		} else if (gameState.gameOver) {
+			if (gameState.roundsLeft > 0) {
+				// Round over screen
+				const baseFontSize = getBaseFontSize(
+					this.screenWidth,
+					this.screenHeight
+				)
+				const roundOverContainer = new PIXI.Container()
+				roundOverContainer.name = 'roundOverContainer'
+				this.drawRoundOver(roundOverContainer, baseFontSize)
+				this.hud.addChild(roundOverContainer)
+			} else {
+				// Final knockout screen
+				this.drawGameOverScreen()
+			}
+		} else {
+			// Active gameplay HUD
+			this.drawGameHUD()
+		}
+
+		// Update ring and crowd if they exist
+		if (this.ring) {
+			this.updateRing()
+		}
+
+		// Force a render update
+		this.app.renderer.render(this.app.stage)
 	}
 
 	async showBasicLoadingScreen() {
@@ -491,12 +689,14 @@ class Game {
 				loadingText.anchor.set(0.5)
 				loadingText.x = this.app.screen.width / 2
 				loadingText.y = this.app.screen.height / 2 - 40
+				loadingText.name = 'loadingText' // Add name
 				this.hud.addChild(loadingText)
 				this.loadingText = loadingText
 			}
 
 			// Create loading bar container
 			const loadingBarContainer = new PIXI.Container()
+			loadingBarContainer.name = 'loadingBar' // Add name
 			loadingBarContainer.x = this.app.screen.width / 2
 			loadingBarContainer.y = this.app.screen.height / 2 + 20
 
@@ -571,19 +771,25 @@ class Game {
 
 	async loadFonts() {
 		try {
-			// Create a font face observer for Press Start 2P
+			// Create and load font face immediately
 			const fontFace = new FontFace(
 				'Press Start 2P',
 				'url(fonts/PressStart2P-Regular.woff2) format("woff2"), url(fonts/PressStart2P-Regular.woff) format("woff"), url(fonts/PressStart2P-Regular.ttf) format("truetype")'
 			)
 
-			// Wait for font to load
-			await fontFace.load()
+			// Start loading immediately
+			const loadPromise = fontFace.load()
 
-			// Add to document fonts
+			// Add to document fonts right away
 			document.fonts.add(fontFace)
 
-			// Wait for all fonts to be ready
+			// Force an immediate font load attempt
+			document.fonts.load('16px "Press Start 2P"')
+
+			// Wait for specific font
+			await loadPromise
+
+			// Double check it's ready
 			await document.fonts.ready
 
 			console.log('Fonts loaded successfully')
@@ -597,58 +803,270 @@ class Game {
 	async initializeGame() {
 		try {
 			console.log('Starting game initialization...')
+			gameState.isLoading = true
 
-			// Show loading screen first with Arial font
-			const loadingScreenSuccess = await this.showBasicLoadingScreen()
-			if (!loadingScreenSuccess) {
-				throw new Error('Failed to show loading screen')
+			// Start time for minimum loading duration
+			const startTime = performance.now()
+
+			// Load everything but keep it hidden
+			let fontsLoaded,
+				assetsLoaded,
+				gameObjectsInitialized = false
+			let titleScreen = null
+
+			// Update progress bar (0/10)
+			if (this.progressText) {
+				this.progressText.text = '----------'
 			}
 
 			// Load fonts first
-			const fontsLoaded = await this.loadFonts()
+			fontsLoaded = await this.loadFonts()
 			if (!fontsLoaded) {
 				console.warn('Fonts failed to load, using fallback fonts')
 			}
 
-			// Load all game assets first
+			// Calculate elapsed time and update progress smoothly
+			const fontLoadTime = performance.now() - startTime
+			const progressAfterFonts = Math.min(0.2, fontLoadTime / MIN_LOADING_TIME)
+			if (this.progressText) {
+				const bars = Math.floor(progressAfterFonts * 10)
+				this.progressText.text = '|'.repeat(bars) + '-'.repeat(10 - bars)
+			}
+
+			// Load all game assets
 			console.log('Loading game assets...')
-			const assetsLoaded = await loadGameAssets()
+			assetsLoaded = await loadGameAssets()
 			if (!assetsLoaded) {
 				console.warn('Failed to load some assets, using fallbacks where needed')
+			}
+
+			// Calculate elapsed time and update progress smoothly
+			const assetLoadTime = performance.now() - startTime
+			const progressAfterAssets = Math.min(
+				0.5,
+				assetLoadTime / MIN_LOADING_TIME
+			)
+			if (this.progressText) {
+				const bars = Math.floor(progressAfterAssets * 10)
+				this.progressText.text = '|'.repeat(bars) + '-'.repeat(10 - bars)
 			}
 
 			// Verify critical textures
 			const criticalTextures = ['arm', 'cheeks']
 			for (const textureName of criticalTextures) {
 				const texture = PIXI.Assets.get(textureName)
-				if (!texture || !texture.valid) {
+				if (!texture || !texture.texture) {
 					console.warn(`Critical texture ${textureName} is invalid or missing`)
 				}
 			}
 
-			// Initialize game objects
+			// Calculate elapsed time and update progress smoothly
+			const textureLoadTime = performance.now() - startTime
+			const progressAfterTextures = Math.min(
+				0.7,
+				textureLoadTime / MIN_LOADING_TIME
+			)
+			if (this.progressText) {
+				const bars = Math.floor(progressAfterTextures * 10)
+				this.progressText.text = '|'.repeat(bars) + '-'.repeat(10 - bars)
+			}
+
+			// Initialize game objects but keep them hidden
 			await this.initGameObjects()
+			gameObjectsInitialized = true
 
-			// Clear loading screen
-			this.hud.removeChildren()
-
-			// Create background first
-			this.createBackground()
-
-			// Show title screen
-			await this.drawTitleScreen()
-			console.log('Title screen drawn')
+			// Calculate elapsed time and update progress smoothly
+			const initTime = performance.now() - startTime
+			const progressAfterInit = Math.min(0.9, initTime / MIN_LOADING_TIME)
+			if (this.progressText) {
+				const bars = Math.floor(progressAfterInit * 10)
+				this.progressText.text = '|'.repeat(bars) + '-'.repeat(10 - bars)
+			}
 
 			// Initialize input handlers
 			this.initInputHandlers()
 
+			// Calculate remaining time to meet minimum loading time
+			const elapsedTime = performance.now() - startTime
+			const remainingTime = Math.max(0, MIN_LOADING_TIME - elapsedTime)
+
+			// If we need more time to reach minimum loading time, add a delay with smooth progress
+			if (remainingTime > 0) {
+				const startProgress = progressAfterInit
+				const updateInterval = 100 // Update every 100ms
+				const totalSteps = Math.min(20, remainingTime / updateInterval) // Cap at 20 steps max
+				let currentStep = 0
+				let lastProgress = startProgress
+
+				await new Promise((resolve) => {
+					const updateProgress = () => {
+						currentStep++
+
+						// Calculate how much progress is left to fill
+						const remainingProgress = 1 - lastProgress
+
+						// Generate a random progress increment
+						// More likely to make smaller progress as we get closer to 100%
+						const maxIncrement =
+							remainingProgress / (totalSteps - currentStep + 1)
+						const randomIncrement = Math.random() * maxIncrement * 0.8 // Use 80% of max possible to ensure we don't complete too early
+
+						// Add the random increment to our last progress
+						const progress = lastProgress + randomIncrement
+						lastProgress = progress
+
+						if (this.progressText) {
+							const bars = Math.floor(progress * 10)
+							this.progressText.text = '|'.repeat(bars) + '-'.repeat(10 - bars)
+						}
+
+						if (currentStep < totalSteps) {
+							setTimeout(updateProgress, updateInterval)
+						} else {
+							// Ensure we reach 100% on the last step
+							if (this.progressText) {
+								this.progressText.text = '||||||||||'
+							}
+							// Add a small delay to show 100% before transitioning
+							setTimeout(resolve, 200)
+						}
+					}
+					updateProgress()
+				})
+			} else {
+				// Even if no remaining time, ensure we show 100% briefly
+				if (this.progressText) {
+					this.progressText.text = '||||||||||'
+					await new Promise((resolve) => setTimeout(resolve, 200))
+				}
+			}
+
+			// Clean up loading screen elements
+			if (this.loadingContainer) {
+				try {
+					// Remove from display list first
+					if (this.loadingContainer.parent) {
+						this.loadingContainer.parent.removeChild(this.loadingContainer)
+					}
+					// Safely destroy container and its children
+					this.loadingContainer.children.forEach((child) => {
+						if (child && !child.destroyed) {
+							child.destroy({
+								children: true,
+								texture: false,
+								baseTexture: false,
+							})
+						}
+					})
+					this.loadingContainer.destroy({ children: true })
+					this.loadingContainer = null
+				} catch (error) {
+					console.warn('Error cleaning up loading container:', error)
+				}
+			}
+
+			if (this.loadingBackground) {
+				try {
+					if (this.loadingBackground.parent) {
+						this.loadingBackground.parent.removeChild(this.loadingBackground)
+					}
+					this.loadingBackground.destroy({ children: true })
+					this.loadingBackground = null
+				} catch (error) {
+					console.warn('Error cleaning up loading background:', error)
+				}
+			}
+
+			if (this.loadingTextContainer) {
+				try {
+					if (this.loadingTextContainer.parent) {
+						this.loadingTextContainer.parent.removeChild(
+							this.loadingTextContainer
+						)
+					}
+					this.loadingTextContainer.destroy({ children: true })
+					this.loadingTextContainer = null
+				} catch (error) {
+					console.warn('Error cleaning up loading text container:', error)
+				}
+			}
+
+			if (this.loadingText) {
+				try {
+					if (this.loadingText.parent) {
+						this.loadingText.parent.removeChild(this.loadingText)
+					}
+					if (!this.loadingText.destroyed) {
+						this.loadingText.destroy(true)
+					}
+					this.loadingText = null
+				} catch (error) {
+					console.warn('Error cleaning up loading text:', error)
+				}
+			}
+
+			if (this.progressText) {
+				try {
+					if (this.progressText.parent) {
+						this.progressText.parent.removeChild(this.progressText)
+					}
+					if (!this.progressText.destroyed) {
+						this.progressText.destroy(true)
+					}
+					this.progressText = null
+				} catch (error) {
+					console.warn('Error cleaning up progress text:', error)
+				}
+			}
+
+			// Clear the HUD completely
+			try {
+				while (this.hud.children.length > 0) {
+					const child = this.hud.children[0]
+					if (child && !child.destroyed) {
+						child.destroy({
+							children: true,
+							texture: false,
+							baseTexture: false,
+						})
+					}
+					this.hud.removeChild(child)
+				}
+			} catch (error) {
+				console.warn('Error clearing HUD:', error)
+			}
+
+			// Initialize game state
+			gameState.gameStarted = false
+			gameState.gameOver = false
+			gameState.score = 0
+			gameState.totalScore = 0
+			gameState.roundsLeft = 3
+			gameState.currentRound = 1
+
+			// Create background with grid
+			this.createBackground()
+
+			// Create and show title screen
+			titleScreen = await this.drawTitleScreen()
+			if (titleScreen) {
+				this.hud.addChild(titleScreen)
+			}
+
+			// Force a render update to ensure everything is ready
+			this.app.renderer.render(this.app.stage)
+
 			// Start game loop
 			this.app.ticker.add((delta) => this.gameLoop(delta))
+
+			// Mark loading as complete
+			gameState.isLoading = false
 
 			console.log('Game initialization complete')
 		} catch (error) {
 			console.error('Failed to initialize game:', error)
 			this.showErrorScreen('Failed to initialize game: ' + error.message)
+			gameState.isLoading = false
 		}
 	}
 
@@ -962,6 +1380,13 @@ class Game {
 		// Remove all existing HUD children with proper cleanup
 		while (this.hud.children.length > 0) {
 			const child = this.hud.children[0]
+
+			// Clear any stored timeouts
+			if (child._timeoutId) {
+				clearTimeout(child._timeoutId)
+				child._timeoutId = null
+			}
+
 			if (child._blinkTicker) {
 				child._blinkTicker.stop()
 				child._blinkTicker.destroy()
@@ -995,6 +1420,13 @@ class Game {
 	destroyContainer(container) {
 		while (container.children.length > 0) {
 			const child = container.children[0]
+
+			// Clear any stored timeouts
+			if (child._timeoutId) {
+				clearTimeout(child._timeoutId)
+				child._timeoutId = null
+			}
+
 			if (child._blinkTicker) {
 				child._blinkTicker.stop()
 				child._blinkTicker.destroy()
@@ -1035,6 +1467,10 @@ class Game {
 		if (container._animationFrameId) {
 			cancelAnimationFrame(container._animationFrameId)
 			container._animationFrameId = null
+		}
+		if (container._timeoutId) {
+			clearTimeout(container._timeoutId)
+			container._timeoutId = null
 		}
 
 		container.destroy({ children: true })
@@ -1194,11 +1630,58 @@ class Game {
 				: this.screenHeight * LAYOUT.DESKTOP_Y_POSITION
 		)
 
-		// Draw copyright separately
-		await this.drawCopyright('round')
+		// Draw copyright with proper z-index
+		const copyrightText = window.cheatMode
+			? 'CHEAT MODE ACTIVATED'
+			: 'NOT © 2024 FWD:FWD:FWD:'
+		const copyright = await this.createText(copyrightText, {
+			fontFamily: 'Press Start 2P',
+			fontSize: baseFontSize * TEXT_SIZES.TINY,
+			fill: window.cheatMode ? 0xff0000 : 0x004643,
+			align: 'center',
+		})
+
+		if (copyright) {
+			copyright.anchor.set(0.5)
+			const copyrightContainer = new PIXI.Container()
+			copyrightContainer.addChild(copyright)
+			copyrightContainer.position.set(
+				this.screenWidth / 2,
+				this.screenHeight - baseFontSize * LAYOUT.COPYRIGHT_BOTTOM
+			)
+
+			if (window.cheatMode) {
+				const blinkHandler = () => {
+					if (!copyright.parent) {
+						this.app.ticker.remove(blinkHandler)
+						return
+					}
+					const time = performance.now()
+					const step = Math.floor(time / 400) % 2 // Faster blink
+					copyright.visible = step === 1
+				}
+				this.app.ticker.add(blinkHandler)
+				copyright._blinkHandler = blinkHandler
+			}
+
+			this.hud.addChild(copyrightContainer)
+		}
+
+		// Store reference to roundsLeftText for cleanup
+		const roundsLeftTextRef = roundsLeftText
 
 		// Add press space group after knockout delay
-		setTimeout(() => {
+		const timeoutId = setTimeout(() => {
+			// Check if container still exists and is in display list
+			if (
+				!mainContainer ||
+				!mainContainer.parent ||
+				!roundsLeftTextRef ||
+				!roundsLeftTextRef.parent
+			) {
+				return
+			}
+
 			const pressSpaceGroup = new PIXI.Container()
 			pressSpaceGroup.name = 'pressSpaceGroup'
 
@@ -1213,7 +1696,13 @@ class Game {
 
 			pressText.anchor.set(0.5)
 			pressSpaceGroup.addChild(pressText)
-			pressSpaceGroup.y = roundsLeftText.y + baseFontSize * LAYOUT.LINE_HEIGHT
+
+			// Only set position if roundsLeftText is still valid
+			if (roundsLeftTextRef && roundsLeftTextRef.parent) {
+				pressSpaceGroup.y =
+					roundsLeftTextRef.y + baseFontSize * LAYOUT.LINE_HEIGHT
+			}
+
 			contentGroup.addChild(pressSpaceGroup)
 
 			const moveHandler = () => {
@@ -1236,6 +1725,9 @@ class Game {
 			// Force a render update
 			this.app.renderer.render(this.app.stage)
 		}, KNOCKOUT_DELAY)
+
+		// Store timeout ID for cleanup
+		mainContainer._timeoutId = timeoutId
 	}
 
 	addDecorativeGloves(pressSpaceGroup, menuSize) {
@@ -1365,10 +1857,8 @@ class Game {
 		const roundsGroup = new PIXI.Container()
 		roundsGroup.addChild(roundsContainer, roundsLabel)
 
-		// Calculate total width of both containers together
+		// Position groups at top center
 		const totalWidth = pointsWidth + roundsWidth
-
-		// Position groups to be centered on screen
 		const startX = (width - totalWidth) / 2
 		pointsGroup.position.set(startX, 0)
 		roundsGroup.position.set(startX + pointsWidth, 0)
@@ -1423,6 +1913,12 @@ class Game {
 	}
 
 	handleInput() {
+		// Prevent input during loading
+		if (gameState.isLoading) {
+			console.log('Ignoring input during loading')
+			return
+		}
+
 		// Update last interaction time
 		this.lastInteractionTime = performance.now()
 
@@ -2312,13 +2808,6 @@ class Game {
 	async drawTitleScreen() {
 		try {
 			console.log('Drawing title screen...')
-			// Clear any existing HUD content with proper cleanup
-			this.clearGameOverScreen()
-
-			// Ensure app.ticker is valid
-			if (!this.app || !this.app.ticker) {
-				throw new Error('Invalid application state')
-			}
 
 			// Use screen dimensions to ensure canvas-relative positioning
 			const width = this.screenWidth
@@ -2329,9 +2818,9 @@ class Game {
 			// Larger base font size - adjusted for text only
 			const baseFontSize = getBaseFontSize(width, height)
 
-			// Hide player/cheeks during title screen
-			if (this.cheeks) this.cheeks.visible = false
-			if (this.gloves) this.gloves.visible = false
+			// Create main container for all title screen content
+			const titleContainer = new PIXI.Container()
+			titleContainer.name = 'titleContainer'
 
 			// Create separate containers for text and gloves
 			const textContainer = new PIXI.Container()
@@ -2419,16 +2908,59 @@ class Game {
 			const bounds = titleGroup.getBounds()
 			textContainer.position.set(width / 2, (height - bounds.height) / 2)
 
-			// Add containers to HUD
-			this.hud.addChild(textContainer)
+			// Add text container to main container
+			titleContainer.addChild(textContainer)
 
-			// Draw copyright with title screen color
-			await this.drawCopyright('title')
+			// Create copyright text
+			const copyrightText = window.cheatMode
+				? 'CHEAT MODE ACTIVATED'
+				: 'NOT © 2024 FWD:FWD:FWD:'
+
+			// Different colors for different screens
+			let color = window.cheatMode ? 0xff0000 : 0x8888ff // light blue for title screen
+
+			const copyright = await this.createText(copyrightText, {
+				fontFamily: 'Press Start 2P',
+				fontSize: baseFontSize * TEXT_SIZES.TINY,
+				fill: color,
+				align: 'center',
+			})
+
+			if (copyright) {
+				copyright.anchor.set(0.5)
+
+				// Create container for copyright
+				const copyrightContainer = new PIXI.Container()
+				copyrightContainer.addChild(copyright)
+
+				// Position at bottom of screen
+				copyrightContainer.x = width / 2
+				copyrightContainer.y = height - baseFontSize * LAYOUT.COPYRIGHT_BOTTOM
+
+				if (window.cheatMode) {
+					// Blinking effect for cheat mode - sync with other blink effects
+					const blinkHandler = () => {
+						if (!copyright.parent) {
+							this.app.ticker.remove(blinkHandler)
+							return
+						}
+						const time = performance.now()
+						const step = Math.floor(time / 400) % 2 // Faster blink
+						copyright.visible = step === 1
+					}
+					this.app.ticker.add(blinkHandler)
+					copyright._blinkHandler = blinkHandler
+				}
+
+				titleContainer.addChild(copyrightContainer)
+			}
 
 			console.log('Title screen drawing complete')
+			return titleContainer
 		} catch (error) {
 			console.error('Error drawing title screen:', error)
 			this.showErrorScreen('Error drawing title screen: ' + error.message)
+			return null
 		}
 	}
 
