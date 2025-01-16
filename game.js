@@ -9,7 +9,7 @@ const KNOCKOUT_DELAY = 1500
 const SPEED_INCREASE = 0.08
 const MAX_SPEED = 2
 const SQUISH_DURATION = 100
-const MIN_LOADING_TIME = 3000 // Minimum loading time in milliseconds
+const MIN_LOADING_TIME = 1800 // Minimum loading time in milliseconds
 
 // Global mobile check - using more comprehensive detection
 const isMobile = (function () {
@@ -564,7 +564,7 @@ class Game {
 			return
 		}
 
-		// Clear existing HUD content
+		// Clear existing HUD content with proper cleanup
 		this.clearGameOverScreen()
 
 		// Update background
@@ -627,31 +627,35 @@ class Game {
 		}
 
 		// Redraw appropriate screen based on game state
-		if (!gameState.gameStarted) {
-			// Title screen
-			this.drawTitleScreen().then((titleScreen) => {
-				if (titleScreen) {
-					this.hud.addChild(titleScreen)
+		try {
+			if (!gameState.gameStarted) {
+				// Title screen
+				this.drawTitleScreen().then((titleScreen) => {
+					if (titleScreen) {
+						this.hud.addChild(titleScreen)
+					}
+				})
+			} else if (gameState.gameOver) {
+				if (gameState.roundsLeft > 0) {
+					// Round over screen
+					const baseFontSize = getBaseFontSize(
+						this.screenWidth,
+						this.screenHeight
+					)
+					const roundOverContainer = new PIXI.Container()
+					roundOverContainer.name = 'roundOverContainer'
+					this.drawRoundOver(roundOverContainer, baseFontSize)
+					this.hud.addChild(roundOverContainer)
+				} else {
+					// Final knockout screen
+					this.drawGameOverScreen()
 				}
-			})
-		} else if (gameState.gameOver) {
-			if (gameState.roundsLeft > 0) {
-				// Round over screen
-				const baseFontSize = getBaseFontSize(
-					this.screenWidth,
-					this.screenHeight
-				)
-				const roundOverContainer = new PIXI.Container()
-				roundOverContainer.name = 'roundOverContainer'
-				this.drawRoundOver(roundOverContainer, baseFontSize)
-				this.hud.addChild(roundOverContainer)
 			} else {
-				// Final knockout screen
-				this.drawGameOverScreen()
+				// Active gameplay HUD
+				this.drawGameHUD()
 			}
-		} else {
-			// Active gameplay HUD
-			this.drawGameHUD()
+		} catch (error) {
+			console.warn('Error redrawing screen during resize:', error)
 		}
 
 		// Update ring and crowd if they exist
@@ -827,7 +831,10 @@ class Game {
 
 			// Calculate elapsed time and update progress smoothly
 			const fontLoadTime = performance.now() - startTime
-			const progressAfterFonts = Math.min(0.2, fontLoadTime / MIN_LOADING_TIME)
+			const progressAfterFonts = Math.min(
+				0.2,
+				fontLoadTime / MIN_LOADING_TIME + Math.random() * 0.05
+			)
 			if (this.progressText) {
 				const bars = Math.floor(progressAfterFonts * 10)
 				this.progressText.text = '|'.repeat(bars) + '-'.repeat(10 - bars)
@@ -844,7 +851,7 @@ class Game {
 			const assetLoadTime = performance.now() - startTime
 			const progressAfterAssets = Math.min(
 				0.5,
-				assetLoadTime / MIN_LOADING_TIME
+				assetLoadTime / MIN_LOADING_TIME + Math.random() * 0.1
 			)
 			if (this.progressText) {
 				const bars = Math.floor(progressAfterAssets * 10)
@@ -864,7 +871,7 @@ class Game {
 			const textureLoadTime = performance.now() - startTime
 			const progressAfterTextures = Math.min(
 				0.7,
-				textureLoadTime / MIN_LOADING_TIME
+				textureLoadTime / MIN_LOADING_TIME + Math.random() * 0.15
 			)
 			if (this.progressText) {
 				const bars = Math.floor(progressAfterTextures * 10)
@@ -877,7 +884,10 @@ class Game {
 
 			// Calculate elapsed time and update progress smoothly
 			const initTime = performance.now() - startTime
-			const progressAfterInit = Math.min(0.9, initTime / MIN_LOADING_TIME)
+			const progressAfterInit = Math.min(
+				0.9,
+				initTime / MIN_LOADING_TIME + Math.random() * 0.1
+			)
 			if (this.progressText) {
 				const bars = Math.floor(progressAfterInit * 10)
 				this.progressText.text = '|'.repeat(bars) + '-'.repeat(10 - bars)
@@ -890,55 +900,46 @@ class Game {
 			const elapsedTime = performance.now() - startTime
 			const remainingTime = Math.max(0, MIN_LOADING_TIME - elapsedTime)
 
-			// If we need more time to reach minimum loading time, add a delay with smooth progress
+			// If we need more time to reach minimum loading time, add a delay with random chunky progress
 			if (remainingTime > 0) {
 				const startProgress = progressAfterInit
-				const updateInterval = 100 // Update every 100ms
-				const totalSteps = Math.min(20, remainingTime / updateInterval) // Cap at 20 steps max
-				let currentStep = 0
-				let lastProgress = startProgress
+				const numChunks = 4 + Math.floor(Math.random() * 4) // 4-7 random chunks
+				const timePerChunk = remainingTime / numChunks
+				let currentChunk = 0
 
 				await new Promise((resolve) => {
 					const updateProgress = () => {
-						currentStep++
+						currentChunk++
 
-						// Calculate how much progress is left to fill
-						const remainingProgress = 1 - lastProgress
-
-						// Generate a random progress increment
-						// More likely to make smaller progress as we get closer to 100%
-						const maxIncrement =
-							remainingProgress / (totalSteps - currentStep + 1)
-						const randomIncrement = Math.random() * maxIncrement * 0.8 // Use 80% of max possible to ensure we don't complete too early
-
-						// Add the random increment to our last progress
-						const progress = lastProgress + randomIncrement
-						lastProgress = progress
+						// Make progress jumpy and random
+						const randomJump = Math.random() * 0.2 // Random jump up to 20%
+						const progress = Math.min(
+							1,
+							startProgress +
+								((1 - startProgress) * currentChunk) / numChunks +
+								randomJump
+						)
 
 						if (this.progressText) {
 							const bars = Math.floor(progress * 10)
 							this.progressText.text = '|'.repeat(bars) + '-'.repeat(10 - bars)
 						}
 
-						if (currentStep < totalSteps) {
-							setTimeout(updateProgress, updateInterval)
+						if (currentChunk < numChunks) {
+							// Random variation in chunk timing
+							const chunkDelay = timePerChunk * (0.5 + Math.random())
+							setTimeout(updateProgress, chunkDelay)
 						} else {
 							// Ensure we reach 100% on the last step
 							if (this.progressText) {
 								this.progressText.text = '||||||||||'
 							}
 							// Add a small delay to show 100% before transitioning
-							setTimeout(resolve, 200)
+							setTimeout(resolve, 100)
 						}
 					}
 					updateProgress()
 				})
-			} else {
-				// Even if no remaining time, ensure we show 100% briefly
-				if (this.progressText) {
-					this.progressText.text = '||||||||||'
-					await new Promise((resolve) => setTimeout(resolve, 200))
-				}
 			}
 
 			// Clean up loading screen elements
@@ -1544,190 +1545,180 @@ class Game {
 	}
 
 	async drawRoundOver(mainContainer, baseFontSize) {
+		if (!mainContainer || mainContainer.destroyed) {
+			console.warn('Invalid container passed to drawRoundOver')
+			return
+		}
+
 		// Hide game objects first
 		if (this.cheeks) this.cheeks.visible = false
 		if (this.gloves) this.gloves.visible = false
 
 		// Create a group for all content except copyright
 		const contentGroup = new PIXI.Container()
+		contentGroup.name = 'roundOverContentGroup'
 
-		// Add "ROUND OVER!!" text
-		const roundOver = await this.createText('ROUND OVER!!', {
-			fontFamily: 'Press Start 2P',
-			fontSize: baseFontSize * TEXT_SIZES.LARGE,
-			fill: 0x000044,
-			align: 'center',
-		})
-
-		if (roundOver) {
-			roundOver.anchor.set(0.5)
-			roundOver.y = 0
-			contentGroup.addChild(roundOver)
-		}
-
-		// Use consistent font size for score text
-		const scoreSize = baseFontSize * TEXT_SIZES.MEDIUM
-		const scoreColor = 0x004643
-		const lineSpacing = scoreSize * LAYOUT.LINE_SPACING
-
-		const roundScore = await this.createText(
-			`ROUND SCORE: ${gameState.score}`,
-			{
+		try {
+			// Add "ROUND OVER!!" text
+			const roundOver = await this.createText('ROUND OVER!!', {
 				fontFamily: 'Press Start 2P',
-				fontSize: scoreSize,
-				fill: scoreColor,
-				align: 'center',
-			}
-		)
-
-		if (roundScore) {
-			roundScore.anchor.set(0.5)
-			roundScore.y = baseFontSize * LAYOUT.LINE_HEIGHT
-			contentGroup.addChild(roundScore)
-		}
-
-		const totalScoreText = await this.createText(
-			`TOTAL SCORE: ${gameState.totalScore + gameState.score}`,
-			{
-				fontFamily: 'Press Start 2P',
-				fontSize: scoreSize,
-				fill: scoreColor,
-				align: 'center',
-			}
-		)
-
-		if (totalScoreText) {
-			totalScoreText.anchor.set(0.5)
-			totalScoreText.y = roundScore.y + lineSpacing
-			contentGroup.addChild(totalScoreText)
-		}
-
-		const roundsLeftText = await this.createText(
-			`ROUNDS LEFT: ${gameState.roundsLeft}`,
-			{
-				fontFamily: 'Press Start 2P',
-				fontSize: scoreSize,
-				fill: scoreColor,
-				align: 'center',
-			}
-		)
-
-		if (roundsLeftText) {
-			roundsLeftText.anchor.set(0.5)
-			roundsLeftText.y = totalScoreText.y + lineSpacing
-			contentGroup.addChild(roundsLeftText)
-		}
-
-		// Add content group to main container
-		mainContainer.addChild(contentGroup)
-
-		// Center the main container
-		const bounds = contentGroup.getBounds()
-		mainContainer.position.set(
-			this.screenWidth / 2,
-			window.isMobile
-				? this.screenHeight * LAYOUT.MOBILE_Y_POSITION
-				: this.screenHeight * LAYOUT.DESKTOP_Y_POSITION
-		)
-
-		// Draw copyright with proper z-index
-		const copyrightText = window.cheatMode
-			? 'CHEAT MODE ACTIVATED'
-			: 'NOT © 2024 FWD:FWD:FWD:'
-		const copyright = await this.createText(copyrightText, {
-			fontFamily: 'Press Start 2P',
-			fontSize: baseFontSize * TEXT_SIZES.TINY,
-			fill: window.cheatMode ? 0xff0000 : 0x004643,
-			align: 'center',
-		})
-
-		if (copyright) {
-			copyright.anchor.set(0.5)
-			const copyrightContainer = new PIXI.Container()
-			copyrightContainer.addChild(copyright)
-			copyrightContainer.position.set(
-				this.screenWidth / 2,
-				this.screenHeight - baseFontSize * LAYOUT.COPYRIGHT_BOTTOM
-			)
-
-			if (window.cheatMode) {
-				const blinkHandler = () => {
-					if (!copyright.parent) {
-						this.app.ticker.remove(blinkHandler)
-						return
-					}
-					const time = performance.now()
-					const step = Math.floor(time / 400) % 2 // Faster blink
-					copyright.visible = step === 1
-				}
-				this.app.ticker.add(blinkHandler)
-				copyright._blinkHandler = blinkHandler
-			}
-
-			this.hud.addChild(copyrightContainer)
-		}
-
-		// Store reference to roundsLeftText for cleanup
-		const roundsLeftTextRef = roundsLeftText
-
-		// Add press space group after knockout delay
-		const timeoutId = setTimeout(() => {
-			// Check if container still exists and is in display list
-			if (
-				!mainContainer ||
-				!mainContainer.parent ||
-				!roundsLeftTextRef ||
-				!roundsLeftTextRef.parent
-			) {
-				return
-			}
-
-			const pressSpaceGroup = new PIXI.Container()
-			pressSpaceGroup.name = 'pressSpaceGroup'
-
-			const buttonText = isMobile ? 'TAP TO CONTINUE' : 'PRESS SPACE'
-
-			const pressText = new PIXI.Text(buttonText, {
-				fontFamily: 'Press Start 2P',
-				fontSize: baseFontSize * TEXT_SIZES.MEDIUM,
-				fill: 0xff0000,
+				fontSize: baseFontSize * TEXT_SIZES.LARGE,
+				fill: 0x000044,
 				align: 'center',
 			})
 
-			pressText.anchor.set(0.5)
-			pressSpaceGroup.addChild(pressText)
-
-			// Only set position if roundsLeftText is still valid
-			if (roundsLeftTextRef && roundsLeftTextRef.parent) {
-				pressSpaceGroup.y =
-					roundsLeftTextRef.y + baseFontSize * LAYOUT.LINE_HEIGHT
+			if (roundOver) {
+				roundOver.anchor.set(0.5)
+				roundOver.y = 0
+				contentGroup.addChild(roundOver)
 			}
 
-			contentGroup.addChild(pressSpaceGroup)
+			// Use consistent font size for score text
+			const scoreSize = baseFontSize * TEXT_SIZES.MEDIUM
+			const scoreColor = 0x004643
+			const lineSpacing = scoreSize * LAYOUT.LINE_SPACING
 
-			const moveHandler = () => {
-				if (!pressSpaceGroup.parent) {
-					this.app.ticker.remove(moveHandler)
-					return
+			const roundScore = await this.createText(
+				`ROUND SCORE: ${gameState.score}`,
+				{
+					fontFamily: 'Press Start 2P',
+					fontSize: scoreSize,
+					fill: scoreColor,
+					align: 'center',
 				}
+			)
 
-				const time = performance.now()
-				const step = Math.floor(time / 400) % 2 // Faster blink
-				if (pressSpaceGroup.children[0]?.style) {
-					pressSpaceGroup.children[0].style.fill = step ? 0xff0000 : 0xffffff
-				}
+			if (roundScore) {
+				roundScore.anchor.set(0.5)
+				roundScore.y = baseFontSize * LAYOUT.LINE_HEIGHT
+				contentGroup.addChild(roundScore)
 			}
 
-			this.app.ticker.add(moveHandler)
-			pressSpaceGroup._moveHandler = moveHandler
-			moveHandler()
+			const totalScoreText = await this.createText(
+				`TOTAL SCORE: ${gameState.totalScore + gameState.score}`,
+				{
+					fontFamily: 'Press Start 2P',
+					fontSize: scoreSize,
+					fill: scoreColor,
+					align: 'center',
+				}
+			)
 
-			// Force a render update
-			this.app.renderer.render(this.app.stage)
-		}, KNOCKOUT_DELAY)
+			if (totalScoreText) {
+				totalScoreText.anchor.set(0.5)
+				totalScoreText.y = roundScore
+					? roundScore.y + lineSpacing
+					: baseFontSize * 2
+				contentGroup.addChild(totalScoreText)
+			}
 
-		// Store timeout ID for cleanup
-		mainContainer._timeoutId = timeoutId
+			const roundsLeftText = await this.createText(
+				`ROUNDS LEFT: ${gameState.roundsLeft}`,
+				{
+					fontFamily: 'Press Start 2P',
+					fontSize: scoreSize,
+					fill: scoreColor,
+					align: 'center',
+				}
+			)
+
+			if (roundsLeftText) {
+				roundsLeftText.anchor.set(0.5)
+				roundsLeftText.y = totalScoreText
+					? totalScoreText.y + lineSpacing
+					: baseFontSize * 3
+				contentGroup.addChild(roundsLeftText)
+			}
+
+			// Add content group to main container if it's still valid
+			if (!mainContainer.destroyed) {
+				mainContainer.addChild(contentGroup)
+
+				// Position the container immediately without bounds calculation
+				mainContainer.position.set(
+					this.screenWidth / 2,
+					window.isMobile
+						? this.screenHeight * LAYOUT.MOBILE_Y_POSITION
+						: this.screenHeight * LAYOUT.DESKTOP_Y_POSITION
+				)
+
+				// Draw copyright separately
+				await this.drawCopyright('game')
+
+				// Store reference to roundsLeftText for cleanup
+				const roundsLeftTextRef = roundsLeftText
+
+				// Add press space group after knockout delay
+				if (!mainContainer.destroyed) {
+					const timeoutId = setTimeout(() => {
+						if (
+							!mainContainer ||
+							mainContainer.destroyed ||
+							!mainContainer.parent ||
+							!roundsLeftTextRef ||
+							!roundsLeftTextRef.parent
+						) {
+							return
+						}
+
+						const pressSpaceGroup = new PIXI.Container()
+						pressSpaceGroup.name = 'pressSpaceGroup'
+
+						const buttonText = isMobile ? 'TAP TO CONTINUE' : 'PRESS SPACE'
+
+						const pressText = new PIXI.Text(buttonText, {
+							fontFamily: 'Press Start 2P',
+							fontSize: baseFontSize * TEXT_SIZES.MEDIUM,
+							fill: 0xff0000,
+							align: 'center',
+						})
+
+						pressText.anchor.set(0.5)
+						pressSpaceGroup.addChild(pressText)
+
+						// Only set position if roundsLeftText is still valid
+						if (roundsLeftTextRef && roundsLeftTextRef.parent) {
+							pressSpaceGroup.y =
+								roundsLeftTextRef.y + baseFontSize * LAYOUT.LINE_HEIGHT
+						}
+
+						contentGroup.addChild(pressSpaceGroup)
+
+						const moveHandler = () => {
+							if (!pressSpaceGroup.parent) {
+								this.app.ticker.remove(moveHandler)
+								return
+							}
+
+							const time = performance.now()
+							const step = Math.floor(time / 400) % 2 // Faster blink
+							if (pressSpaceGroup.children[0]?.style) {
+								pressSpaceGroup.children[0].style.fill = step
+									? 0xff0000
+									: 0xffffff
+							}
+						}
+
+						this.app.ticker.add(moveHandler)
+						pressSpaceGroup._moveHandler = moveHandler
+						moveHandler()
+
+						// Force a render update
+						this.app.renderer.render(this.app.stage)
+					}, KNOCKOUT_DELAY)
+
+					// Store timeout ID for cleanup
+					mainContainer._timeoutId = timeoutId
+				}
+			}
+		} catch (error) {
+			console.warn('Error creating round over screen:', error)
+			// Clean up if there was an error
+			if (contentGroup.parent) {
+				contentGroup.parent.removeChild(contentGroup)
+			}
+			contentGroup.destroy({ children: true })
+		}
 	}
 
 	addDecorativeGloves(pressSpaceGroup, menuSize) {
