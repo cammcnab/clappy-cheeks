@@ -64,7 +64,6 @@
 				width: 100%;
 				overflow: hidden;
 				position: fixed;
-				touch-action: manipulation;
 			}
 
 			/* Additional body styles */
@@ -192,7 +191,6 @@
 			}
 
 			html {
-				touch-action: manipulation;
 				height: 100%;
 				overflow: hidden;
 				position: fixed;
@@ -200,7 +198,6 @@
 			}
 
 			body {
-				touch-action: manipulation;
 				height: 100%;
 				overflow: hidden;
 				position: fixed;
@@ -209,7 +206,6 @@
 				justify-content: center;
 				align-items: center;
 				background-color: #000;
-				-webkit-tap-highlight-color: transparent;
 			}
 
 			.tv-container {
@@ -1685,51 +1681,6 @@
 				if (isTouchDevice()) {
 					document.body.classList.add('touch-device')
 				}
-
-				// Prevent zoom on double tap
-				let lastTouchEnd = 0
-				document.addEventListener(
-					'touchend',
-					(event) => {
-						const now = Date.now()
-						if (now - lastTouchEnd <= 300) {
-							event.preventDefault()
-						}
-						lastTouchEnd = now
-					},
-					{ passive: false }
-				)
-
-				// Prevent zoom on pinch
-				document.addEventListener(
-					'touchmove',
-					(event) => {
-						if (event.touches.length > 1) {
-							event.preventDefault()
-						}
-					},
-					{ passive: false }
-				)
-
-				// Prevent zoom on gesture
-				document.addEventListener(
-					'gesturestart',
-					(event) => {
-						event.preventDefault()
-					},
-					{ passive: false }
-				)
-
-				// Lock viewport on orientation change
-				window.addEventListener('orientationchange', () => {
-					const meta = document.querySelector('meta[name="viewport"]')
-					if (meta) {
-						meta.setAttribute(
-							'content',
-							'width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover'
-						)
-					}
-				})
 			})
 		</script>
 
