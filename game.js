@@ -53,7 +53,7 @@ const TEXT_SIZES = {
 	LARGE: 0.8, // Large text (e.g. "ROUND OVER!!")
 	MEDIUM: 0.5, // Medium text (e.g. "instructions, PRESS SPACE")
 	SMALL: isMobile ? 0.45 : 0.35, // Small text (e.g. score)
-	TINY: isMobile ? 0.35 : 0.2, // Tiny text (e.g. copyright)
+	TINY: isMobile ? 0.35 : 0.25, // Tiny text (e.g. copyright)
 }
 
 // Global font size helper
