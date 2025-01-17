@@ -135,7 +135,7 @@
 				border: 1px solid #333;
 				box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3),
 					0 1px 1px rgba(255, 255, 255, 0.05);
-				width: 100px;
+				width: 20%;
 				height: 32px;
 			}
 
@@ -150,13 +150,11 @@
 			/* Touch device speaker adjustments */
 			.touch-device .speaker-grille-right {
 				display: block;
-				width: 80px;
 				height: 24px;
 				margin: 0;
 			}
 
 			.touch-device .speaker-grille {
-				width: 80px;
 				height: 24px;
 				margin: 0;
 			}
@@ -332,13 +330,13 @@
 				align-items: center;
 				justify-content: flex-start;
 				gap: 20px;
+				width: 100%;
 				height: 32px;
 				position: relative;
 				padding: 0;
 			}
 
 			.speaker-grille {
-				width: 100px;
 				height: 32px;
 				margin-right: 20px;
 			}
@@ -481,7 +479,6 @@
 				}
 
 				.speaker-grille {
-					width: 80px;
 					height: 24px;
 					margin: 0;
 				}
@@ -514,13 +511,6 @@
 			.speaker-grille-right,
 			.power-group-mobile {
 				display: none;
-			}
-
-			/* Touch device specific changes */
-			.touch-device .speaker-grille-right {
-				display: block;
-				width: 80px;
-				height: 24px;
 			}
 
 			.touch-device .power-group-desktop {
@@ -594,7 +584,6 @@
 			/* Speaker grille */
 			.speaker-grille {
 				height: 32px;
-				width: 100px;
 				background-image: var(--noise-texture),
 					repeating-linear-gradient(
 						90deg,
@@ -1057,7 +1046,6 @@
 
 				.speaker-grille-right {
 					display: flex;
-					width: 80px;
 					height: 24px;
 				}
 
@@ -1066,6 +1054,16 @@
 					flex-direction: column;
 					gap: 12px;
 					justify-content: center;
+				}
+
+				.control-panel div {
+					max-width: 800px;
+				}
+
+				@media (min-width: 742px) {
+					.control-panel {
+						padding-bottom: calc(var(--tv-padding) * 1.8);
+					}
 				}
 
 				.top-row {
@@ -1229,25 +1227,6 @@
 					backface-visibility: hidden;
 					perspective: 1000;
 					transform: translateZ(0);
-				}
-			}
-
-			/* Speaker grille sizes */
-			@media (max-width: 768px) {
-				.speaker-grille,
-				.speaker-grille-right {
-					width: 80px;
-					height: 24px;
-					margin: 0;
-				}
-
-				/* Adjust gamepad container positions */
-				.dpad-container {
-					margin: 0;
-				}
-
-				.action-buttons-container {
-					margin: 0;
 				}
 			}
 		</style>
