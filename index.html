@@ -107,25 +107,6 @@
 				-webkit-overflow-scrolling: none;
 			}
 
-			/* Lock orientation for mobile phones */
-			@media screen and (max-width: 742px) and (orientation: landscape) {
-				html {
-					transform: rotate(-90deg);
-					transform-origin: left top;
-					width: 100vh;
-					height: 100vw;
-					overflow-x: hidden;
-					position: absolute;
-					top: 100%;
-					left: 0;
-				}
-				body {
-					transform-origin: left top;
-					width: 100vh;
-					height: 100vw;
-				}
-			}
-
 			/* Additional body styles */
 			body {
 				display: flex;
@@ -516,49 +497,6 @@
 				gap: 8px;
 			}
 
-			/* Common media query styles */
-			@media (max-width: 768px) {
-				.control-panel {
-					flex-direction: column;
-					gap: 12px;
-					justify-content: center;
-					padding: var(--tv-padding);
-				}
-
-				.top-row {
-					width: 100%;
-					justify-content: space-between;
-					gap: 0;
-					height: 32px;
-				}
-
-				.speaker-grille {
-					height: 24px;
-					margin: 0;
-				}
-
-				.controls {
-					height: 32px;
-					gap: 6px;
-					justify-content: stretch;
-					width: 100%;
-				}
-
-				.control-button {
-					height: 32px;
-					flex: 1;
-					padding: 0 8px;
-				}
-
-				#gameCanvas,
-				.game-wrapper {
-					will-change: transform;
-					backface-visibility: hidden;
-					perspective: 1000;
-					transform: translateZ(0);
-				}
-			}
-
 			/* Base styles for elements that only show on touch */
 			.gamepad-row,
 			.speaker-grille-right,
@@ -598,12 +536,6 @@
 				flex-direction: column;
 				gap: 12px;
 				justify-content: center;
-			}
-
-			@media (min-width: 742px) {
-				.touch-device .control-panel {
-					padding-bottom: calc(var(--tv-padding) * 3);
-				}
 			}
 
 			/* Brand logo */
@@ -1103,18 +1035,6 @@
 				transform: translate(-50%, -50%) rotate(25deg) translateY(1px);
 			}
 
-			/* Show gamepad only on mobile */
-			@media (max-width: 768px) {
-				.touch-device .gamepad-row {
-					display: flex;
-					order: -1;
-				}
-
-				.control-panel {
-					padding-top: 12px;
-				}
-			}
-
 			/* Desktop styles */
 			@media (min-width: 769px) {
 				.control-panel {
@@ -1124,7 +1044,6 @@
 
 				.top-row {
 					flex: 1;
-					justify-content: flex-start;
 					gap: 20px;
 					position: initial;
 				}
@@ -1142,26 +1061,75 @@
 					justify-content: flex-end;
 				}
 
-				.control-button {
+				:not(.touch-device) .control-button {
 					width: 72px;
 				}
 			}
 
-			/* Mobile optimizations */
-			@media (max-width: 768px) {
-				#gameCanvas {
-					will-change: transform;
-					backface-visibility: hidden;
-					perspective: 1000;
-					transform: translateZ(0);
-				}
+			.touch-device #gameCanvas {
+				will-change: transform;
+				backface-visibility: hidden;
+				perspective: 1000;
+				transform: translateZ(0);
+			}
 
-				.game-wrapper {
-					will-change: transform;
-					backface-visibility: hidden;
-					perspective: 1000;
-					transform: translateZ(0);
+			.touch-device .game-wrapper {
+				will-change: transform;
+				backface-visibility: hidden;
+				perspective: 1000;
+				transform: translateZ(0);
+			}
+
+			.touch-device .gamepad-row {
+				display: flex;
+				order: -1;
+			}
+
+			.touch-device .control-panel {
+				flex-direction: column;
+				padding-top: 12px;
+				gap: 12px;
+				justify-content: center;
+				padding: var(--tv-padding);
+			}
+
+			@media (min-width: 742px) and (orientation: portrait) {
+				.touch-device .control-panel {
+					padding-bottom: calc(var(--tv-padding) * 3);
 				}
+			}
+
+			.touch-device .top-row {
+				width: 100%;
+				justify-content: space-between;
+				gap: 0;
+				height: 32px;
+			}
+
+			.touch-device .speaker-grille {
+				height: 24px;
+				margin: 0;
+			}
+
+			.touch-device .controls {
+				height: 32px;
+				gap: 6px;
+				justify-content: stretch;
+				width: 100%;
+			}
+
+			.touch-device .control-button {
+				height: 32px;
+				flex: 1;
+				padding: 0 8px;
+			}
+
+			.touch-device #gameCanvas,
+			.touch-device .game-wrapper {
+				will-change: transform;
+				backface-visibility: hidden;
+				perspective: 1000;
+				transform: translateZ(0);
 			}
 		</style>
 	</head>
@@ -1752,6 +1720,31 @@
 
 		<!-- Portrait mode -->
 		<script>
+			// Function to handle orientation
+			function handleOrientation() {
+				// Check if device is in landscape mode
+				const isLandscape =
+					window.orientation === 90 || window.orientation === -90
+
+				if (isLandscape) {
+					// Force portrait mode when device is in landscape
+					document.documentElement.style.transform = 'rotate(-90deg)'
+					document.documentElement.style.transformOrigin = 'left top'
+					document.documentElement.style.width = '100vh'
+					document.documentElement.style.height = '100vw'
+					document.documentElement.style.position = 'absolute'
+					document.documentElement.style.top = '100%'
+				} else {
+					// Reset transforms when in portrait
+					document.documentElement.style.transform = ''
+					document.documentElement.style.transformOrigin = ''
+					document.documentElement.style.width = ''
+					document.documentElement.style.height = ''
+					document.documentElement.style.position = ''
+					document.documentElement.style.top = ''
+				}
+			}
+
 			window.addEventListener('load', function () {
 				// Try to lock orientation if supported
 				if (screen.orientation && screen.orientation.lock) {
@@ -1760,26 +1753,19 @@
 					})
 				}
 
-				// Force portrait on orientation change
-				window.addEventListener('orientationchange', function () {
-					if (window.orientation === 90 || window.orientation === -90) {
-						// Force portrait mode when device is in landscape
-						document.documentElement.style.transform = 'rotate(-90deg)'
-						document.documentElement.style.transformOrigin = 'left top'
-						document.documentElement.style.width = '100vh'
-						document.documentElement.style.height = '100vw'
-						document.documentElement.style.position = 'absolute'
-						document.documentElement.style.top = '100%'
-					} else {
-						// Reset transforms when in portrait
-						document.documentElement.style.transform = ''
-						document.documentElement.style.transformOrigin = ''
-						document.documentElement.style.width = ''
-						document.documentElement.style.height = ''
-						document.documentElement.style.position = ''
-						document.documentElement.style.top = ''
-					}
-				})
+				// Check if touch device
+				const isTouchDevice =
+					'ontouchstart' in window ||
+					navigator.maxTouchPoints > 0 ||
+					navigator.msMaxTouchPoints > 0
+
+				if (isTouchDevice) {
+					// Handle initial orientation for touch devices
+					handleOrientation()
+				}
+
+				// Add orientation change listener
+				window.addEventListener('orientationchange', handleOrientation)
 			})
 		</script>
 	</body>
