@@ -18,13 +18,13 @@ const isMobile = (function () {
 
 // Game constants
 const MIN_LOADING_TIME = 1800 // Minimum loading time in milliseconds
-const GRAVITY = isMobile ? 0.12 : 0.3
-const CLAP_SPEED = isMobile ? -3.5 : -5.0 // This is how fast the cheeks move upward when the player taps/clicks - negative means up
+const GRAVITY = isMobile ? 0.2 : 0.4
+const CLAP_SPEED = isMobile ? -4 : -7.0 // This is how fast the cheeks move upward when the player taps/clicks - negative means up
 let GLOVE_SET_GAP = isMobile ? 0.8 : 0.6
 const SPAWN_OFFSET = 1.1
 const PLAYER_X = 0.45
-const GLOVE_SPEED = 8
-const SPEED_INCREASE = 0.1
+const GLOVE_SPEED = isMobile ? 10 : 8
+const SPEED_INCREASE = 0.12
 const MAX_SPEED = 16
 const KNOCKOUT_DELAY = 1500
 const SQUISH_DURATION = 100
@@ -294,8 +294,8 @@ class Game {
 			// Create CRT filter with proper settings
 			this.crtFilter = new PIXI.filters.CRTFilter()
 			this.crtFilter.curvature = window.isMobile ? 2 : 8
-			this.crtFilter.lineWidth = 1.1
-			this.crtFilter.lineContrast = 0.1
+			this.crtFilter.lineWidth = window.isMobile ? 0.02 : 1.1
+			this.crtFilter.lineContrast = window.isMobile ? 0.04 : 0.1
 			this.crtFilter.verticalLine = false
 			this.crtFilter.noise = 0.05
 			this.crtFilter.noiseSize = 1.1
