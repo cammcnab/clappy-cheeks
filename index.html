@@ -166,9 +166,8 @@
 				/* Common gradients */
 				--noise-gradient: var(--noise-texture),
 					linear-gradient(180deg, #1a1a1a 0%, #151515 40%, #111 100%);
-				--button-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.03),
-					0 1px 2px rgba(0, 0, 0, 0.2),
-					inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+				--button-shadow: inset 0 1px 5px rgba(255, 255, 255, 0.03),
+					0 2px 4px rgba(0, 0, 0, 0.3);
 				--button-active-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.3),
 					0 1px 1px rgba(0, 0, 0, 0.1), inset 0 0 0 1px rgba(0, 0, 0, 0.2);
 			}
@@ -802,206 +801,135 @@
 				width: 96px;
 				height: 96px;
 				background: transparent;
+				transform-style: preserve-3d;
+				transition: transform 0.05s ease-out;
+				will-change: transform;
 			}
 
 			/* Main D-pad shape */
 			.dpad::before {
 				content: '';
 				position: absolute;
-				top: 8px;
-				left: 8px;
-				right: 8px;
-				bottom: 8px;
-				background: #0a0a0a;
-				/* Single SVG path for the D-pad shape */
-				mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Cpath d='M36,0 C34,0 32,2 32,4 V32 H4 C2,32 0,34 0,36 V60 C0,62 2,64 4,64 H32 V92 C32,94 34,96 36,96 H60 C62,96 64,94 64,92 V64 H92 C94,64 96,62 96,60 V36 C96,34 94,32 92,32 H64 V4 C64,2 62,0 60,0 Z' fill='white'/%3E%3C/svg%3E");
-				-webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Cpath d='M36,0 C34,0 32,2 32,4 V32 H4 C2,32 0,34 0,36 V60 C0,62 2,64 4,64 H32 V92 C32,94 34,96 36,96 H60 C62,96 64,94 64,92 V64 H92 C94,64 96,62 96,60 V36 C96,34 94,32 92,32 H64 V4 C64,2 62,0 60,0 Z' fill='white'/%3E%3C/svg%3E");
-				/* Match action button glossy effect */
-				background-image: linear-gradient(
-					145deg,
-					rgba(255, 255, 255, 0.07) 0%,
-					rgba(255, 255, 255, 0.03) 30%,
-					rgba(0, 0, 0, 0) 50%,
-					rgba(0, 0, 0, 0.1) 100%
-				);
-				box-shadow:
-								/* Outer edge */ 0 2px 4px rgba(0, 0, 0, 0.9),
-					/* Drop shadow */ 0 3px 6px rgba(0, 0, 0, 0.5),
-					/* Inner shadow */ inset 0 2px 4px rgba(0, 0, 0, 0.9),
-					/* Subtle rim light */ inset 0 1px 1px rgba(255, 255, 255, 0.07);
-				filter: brightness(0.9);
+				width: 84px;
+				height: 32px;
+				top: 50%;
+				left: 50%;
+				transform: translate(-50%, -50%);
+				background: #0f0f13;
+				border-radius: 4px;
+				box-shadow: 0 0 0 rgba(0, 0, 0, 1) inset,
+					0 1px 1px rgba(255, 255, 255, 0.2) inset,
+					0px 4px 2px rgba(0, 0, 0, 0.1), 1px 5px 4px rgba(0, 0, 0, 0.2);
+				backface-visibility: hidden;
 			}
 
-			/* Add internal shapes for dimension */
+			/* Vertical part of D-pad */
 			.dpad::after {
 				content: '';
 				position: absolute;
-				top: 8px;
-				left: 8px;
-				right: 8px;
-				bottom: 8px;
-				/* SVG for internal shapes */
-				background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Cpath d='M36,4 V30 A2,2 0 0,1 34,32 H6 A2,2 0 0,0 4,34 V62 A2,2 0 0,0 6,64 H34 A2,2 0 0,1 36,66 V92 A2,2 0 0,0 38,94 H58 A2,2 0 0,0 60,92 V66 A2,2 0 0,1 62,64 H90 A2,2 0 0,0 92,62 V34 A2,2 0 0,0 90,32 H62 A2,2 0 0,1 60,30 V4 A2,2 0 0,0 58,2 H38 A2,2 0 0,0 36,4' fill='none' stroke='rgba(0,0,0,0.7)' stroke-width='2'/%3E%3Cpath d='M36,8 V28 A4,4 0 0,1 32,32 H8 A4,4 0 0,0 4,36 V60 A4,4 0 0,0 8,64 H32 A4,4 0 0,1 36,68 V88 A4,4 0 0,0 40,92 H56 A4,4 0 0,0 60,88 V68 A4,4 0 0,1 64,64 H88 A4,4 0 0,0 92,60 V36 A4,4 0 0,0 88,32 H64 A4,4 0 0,1 60,28 V8 A4,4 0 0,0 56,4 H40 A4,4 0 0,0 36,8' fill='none' stroke='rgba(255,255,255,0.02)' stroke-width='1'/%3E%3C/svg%3E");
-				pointer-events: none;
-				opacity: 0.9;
+				height: 84px;
+				width: 32px;
+				top: 50%;
+				left: 50%;
+				transform: translate(-50%, -50%);
+				background: #0f0f13;
+				border-radius: 4px;
+				box-shadow: 0 0 0 rgba(0, 0, 0, 1) inset,
+					0 1px 1px rgba(255, 255, 255, 0.2) inset,
+					0px 4px 2px rgba(0, 0, 0, 0.1), 1px 5px 4px rgba(0, 0, 0, 0.2);
+				backface-visibility: hidden;
+			}
+
+			/* Middle circle of D-pad */
+			.dpad-middle {
+				position: absolute;
+				width: 34px;
+				height: 34px;
+				top: 51%;
+				left: 50%;
+				transform: translate(-50%, -50%);
+				border-radius: 50%;
+				background: #232533;
+				background: linear-gradient(to bottom, #0f0f13 0%, #1b1b22 100%);
+				box-shadow: 0 -2px 2px rgba(64, 64, 81, 0.2) inset,
+					0 0 2px 6px rgba(15, 15, 19, 1);
+				z-index: 2;
+				backface-visibility: hidden;
+			}
+
+			/* Depression effects - Updated to move as one unit */
+			.dpad-button:active ~ .dpad {
+				filter: brightness(0.85);
+			}
+
+			/* Direction-specific depression effects - Now moves entire d-pad */
+			.dpad-button[data-direction='up']:active ~ .dpad {
+				transform: perspective(600px) rotateX(6deg) translateY(-2px);
+			}
+
+			.dpad-button[data-direction='down']:active ~ .dpad {
+				transform: perspective(600px) rotateX(-6deg) translateY(2px);
+			}
+
+			.dpad-button[data-direction='left']:active ~ .dpad {
+				transform: perspective(600px) rotateY(6deg) translateX(-2px);
+			}
+
+			.dpad-button[data-direction='right']:active ~ .dpad {
+				transform: perspective(600px) rotateY(-6deg) translateX(2px);
+			}
+
+			/* Remove old individual piece transformations */
+			.dpad-button:active ~ .dpad::before,
+			.dpad-button:active ~ .dpad::after {
+				filter: brightness(0.85);
+			}
+
+			.dpad-button:active ~ .dpad-middle {
+				filter: brightness(0.85);
 			}
 
 			/* Invisible button overlays */
 			.dpad-button {
 				position: absolute;
-				width: 32px;
-				height: 32px;
+				width: 42px;
+				height: 42px;
 				background: transparent;
 				z-index: 3;
 				cursor: pointer;
 			}
 
-			/* Position buttons */
+			/* Position buttons with larger hit areas */
 			.dpad-button[data-direction='up'] {
-				top: 0;
+				top: -4px;
 				left: 32px;
-				height: 36px;
+				height: 46px;
+				width: 46px;
+				rotate: 45deg;
 			}
 
 			.dpad-button[data-direction='right'] {
 				top: 32px;
-				right: 0;
-				width: 36px;
+				right: -4px;
+				width: 46px;
+				height: 46px;
+				rotate: 45deg;
 			}
 
 			.dpad-button[data-direction='down'] {
-				bottom: 0;
+				bottom: -4px;
 				left: 32px;
-				height: 36px;
+				height: 46px;
+				width: 46px;
+				rotate: 45deg;
 			}
 
 			.dpad-button[data-direction='left'] {
 				top: 32px;
-				left: 0;
-				width: 36px;
-			}
-
-			/* Depression effects */
-			.dpad-button:active ~ .dpad::before {
-				filter: brightness(0.85);
-				background-image: linear-gradient(
-					145deg,
-					rgba(0, 0, 0, 0.1) 0%,
-					rgba(0, 0, 0, 0.05) 30%,
-					rgba(0, 0, 0, 0.1) 50%,
-					rgba(0, 0, 0, 0.15) 100%
-				);
-				box-shadow:
-								/* Maintain edge */ 0 1px 2px rgba(0, 0, 0, 0.6),
-					/* Pressed drop shadow */ 0 2px 4px rgba(0, 0, 0, 0.4),
-					/* Deeper inner shadow */ inset 0 2px 5px rgba(0, 0, 0, 1);
-				transform: translateY(1px);
-			}
-
-			/* Adjust internal shapes when pressed */
-			.dpad-button:active ~ .dpad::after {
-				opacity: 0.7;
-				filter: brightness(0.8);
-			}
-
-			/* Direction-specific depression effects */
-			.dpad-button[data-direction='up']:active ~ .dpad::before {
-				transform-origin: center bottom;
-				transform: perspective(200px) rotateX(-1deg);
-			}
-
-			.dpad-button[data-direction='down']:active ~ .dpad::before {
-				transform-origin: center top;
-				transform: perspective(200px) rotateX(1deg);
-			}
-
-			.dpad-button[data-direction='left']:active ~ .dpad::before {
-				transform-origin: right center;
-				transform: perspective(200px) rotateY(1deg);
-			}
-
-			.dpad-button[data-direction='right']:active ~ .dpad::before {
-				transform-origin: left center;
-				transform: perspective(200px) rotateY(-1deg);
-			}
-
-			/* Action buttons with smoother gloss */
-			.action-button {
-				position: relative;
-				width: 48px;
-				height: 48px;
-				background: #111111;
-				border: none;
-				border-radius: 50%;
-				display: flex;
-				align-items: center;
-				justify-content: center;
-				color: transparent;
-				cursor: pointer;
-				/* Smoother glossy effect */
-				background-image: linear-gradient(
-					145deg,
-					rgba(255, 255, 255, 0.07) 0%,
-					rgba(255, 255, 255, 0.03) 30%,
-					rgba(0, 0, 0, 0) 50%,
-					rgba(0, 0, 0, 0.1) 100%
-				);
-				box-shadow:
-								/* Outer edge */ 0 2px 4px rgba(0, 0, 0, 0.9),
-					/* Drop shadow */ 0 3px 6px rgba(0, 0, 0, 0.5),
-					/* Inner shadow */ inset 0 2px 4px rgba(0, 0, 0, 0.9),
-					/* Subtle rim light */ inset 0 1px 1px rgba(255, 255, 255, 0.07);
-				transition: transform 0.08s ease-out;
-				transform: translateZ(0);
-				will-change: transform;
-			}
-
-			.action-button:active {
-				transform: scale(0.98) translateZ(0);
-				opacity: 0.9;
-			}
-
-			/* Show gamepad only on mobile */
-			@media (max-width: 768px) {
-				.gamepad-row {
-					display: flex;
-					order: -1;
-				}
-
-				.control-panel {
-					padding-top: 12px;
-				}
-			}
-
-			/* Debossed labels directly on buttons */
-			.action-button::after {
-				content: attr(data-action);
-				position: absolute;
-				top: 50%;
-				left: 50%;
-				transform: translate(-50%, -50%) rotate(25deg);
-				color: transparent;
-				font-size: 20px;
-				font-weight: 700;
-				text-transform: uppercase;
-				/* Create debossed effect */
-				background: linear-gradient(
-					145deg,
-					rgba(0, 0, 0, 0.8) 0%,
-					rgba(0, 0, 0, 0.5) 100%
-				);
-				-webkit-background-clip: text;
-				background-clip: text;
-				/* Add subtle shadow for depth */
-				text-shadow: 0px 1px 1px rgba(255, 255, 255, 0.02),
-					0px -1px 1px rgba(0, 0, 0, 0.9);
-			}
-
-			/* Adjust label when button is pressed */
-			.action-button:active::after {
-				transform: translate(-50%, -50%) rotate(25deg) scale(0.98);
-				text-shadow: 0px 1px 1px rgba(255, 255, 255, 0.01),
-					0px -1px 1px rgba(0, 0, 0, 1);
+				left: -4px;
+				width: 46px;
+				height: 46px;
+				rotate: 45deg;
 			}
 
 			/* Action buttons container */
@@ -1010,101 +938,63 @@
 				display: flex;
 				gap: 20px;
 				margin: 4px;
-				/* Remove rotation since container is already rotated */
-				transform: none;
 			}
 
-			/* Base styles for non-touch devices */
-			.gamepad-row {
-				display: none;
-			}
-
-			.speaker-grille-right {
-				display: none;
-			}
-
-			.power-group-mobile {
-				display: none;
-			}
-
-			/* Touch device styles */
-			.touch-device {
-				/* Hide desktop elements */
-				.power-group-desktop {
-					display: none;
-				}
-
-				/* Show mobile elements */
-
-				.speaker-grille-right {
-					display: flex;
-					height: 24px;
-				}
-
-				/* Layout adjustments */
-				.control-panel {
-					flex-direction: column;
-					gap: 12px;
-					justify-content: center;
-				}
-
-				.control-panel div {
-					max-width: 800px;
-				}
-
-				@media (min-width: 742px) {
-					.control-panel {
-						padding-bottom: calc(var(--tv-padding) * 1.8);
-					}
-				}
-
-				.top-row {
-					justify-content: space-between;
-					height: 32px;
-				}
-
-				.controls {
-					height: 32px;
-					gap: 6px;
-					justify-content: stretch;
-					width: 100%;
-				}
-
-				.control-button {
-					height: 32px;
-					flex: 1;
-					padding: 0 8px;
-				}
-
-				/* Gamepad specific */
-				.gamepad-row {
-					order: -1;
-					position: relative;
-					justify-content: space-between;
-					align-items: center;
-					height: 120px;
-				}
-
-				.power-group-mobile {
-					display: flex;
-					position: absolute;
-					left: 50%;
-					top: 50%;
-					transform: translate(-50%, -50%);
-					flex-direction: column;
-					align-items: center;
-					gap: 4px;
-					z-index: 2;
-					margin-top: 0;
-				}
-			}
-
-			/* Gamepad components */
-			.dpad-container,
-			.action-buttons-container {
+			/* Button wrapper to handle positioning */
+			.action-button-wrapper {
 				position: relative;
-				padding: 6px;
+				width: 48px;
+				height: 48px;
+			}
+
+			/* Invisible hit areas for action buttons */
+			.action-button-hitbox {
+				position: absolute;
+				width: 64px;
+				height: 64px;
 				background: transparent;
+				z-index: 3;
+				cursor: pointer;
+				border-radius: 50%;
+				top: 50%;
+				left: 50%;
+				transform: translate(-50%, -50%);
+			}
+
+			/* Action buttons with smoother gloss */
+			.action-button {
+				position: absolute;
+				width: 48px;
+				height: 48px;
+				background: radial-gradient(
+					circle at bottom right,
+					#0c0c0f 50%,
+					#202028 100%
+				);
+				border: none;
+				border-radius: 50%;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				color: transparent;
+				cursor: pointer;
+				box-shadow: 0 0 0 rgba(0, 0, 0, 1) inset,
+					0 1px 1px rgba(255, 255, 255, 0.2) inset,
+					0px 4px 2px rgba(0, 0, 0, 0.1), 1px 5px 4px rgba(0, 0, 0, 0.2);
+				transition: transform 0.08s ease-out;
+				will-change: transform;
+				pointer-events: none;
+				top: 0;
+				left: 0;
+			}
+
+			/* Action buttons container styles */
+			.touch-device .action-buttons-container {
+				position: relative;
+				padding: 8px;
+				background: transparent;
+				border-radius: 999px;
+				transform: rotate(-25deg);
 				background-image: linear-gradient(
 					145deg,
 					rgba(0, 0, 0, 0.3) 0%,
@@ -1114,62 +1004,49 @@
 				box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
 			}
 
-			.dpad-container {
-				width: 108px;
-				height: 108px;
-				border-radius: 50%;
-				margin: 0;
+			/* Active states for hit areas */
+			.action-button-hitbox:active + .action-button {
+				transform: scale(0.98) translateY(1px);
+				filter: brightness(0.85);
+				box-shadow: 0 0 0 rgba(0, 0, 0, 1) inset,
+					0 2px 1px rgba(255, 255, 255, 0.081) inset,
+					1px 1px 0 rgba(0, 0, 0, 0.1), 1px 2px 1px rgba(0, 0, 0, 0.2);
 			}
 
-			.action-buttons-container {
-				border-radius: 999px;
-				transform: rotate(-25deg);
-				margin: 0;
+			.action-button-hitbox:active + .action-button::after {
+				transform: translate(-50%, -50%) rotate(25deg) translateY(1px);
 			}
 
-			/* Action buttons */
-			.action-buttons {
-				gap: 20px;
-				margin: 4px;
-				transform: none;
+			/* Debossed labels directly on buttons */
+			.action-button::after {
+				content: attr(data-action);
+				position: absolute;
+				top: 50%;
+				left: 50%;
+				transform: translate(-50%, -50%) rotate(25deg);
+				font-size: 20px;
+				font-weight: 700;
+				text-transform: uppercase;
+				background: linear-gradient(to bottom, #121217 0%, #3b3b49 100%);
+				-webkit-background-clip: text;
+				background-clip: text;
 			}
 
-			.action-button {
-				width: 48px;
-				height: 48px;
-				background: #111111;
-				border: none;
-				border-radius: 50%;
-				display: flex;
-				align-items: center;
-				justify-content: center;
-				color: transparent;
-				cursor: pointer;
-				background-image: linear-gradient(
-					145deg,
-					rgba(255, 255, 255, 0.07) 0%,
-					rgba(255, 255, 255, 0.03) 30%,
-					rgba(0, 0, 0, 0) 50%,
-					rgba(0, 0, 0, 0.1) 100%
-				);
-				box-shadow: 0 2px 4px rgba(0, 0, 0, 0.9), 0 3px 6px rgba(0, 0, 0, 0.5),
-					inset 0 2px 4px rgba(0, 0, 0, 0.9),
-					inset 0 1px 1px rgba(255, 255, 255, 0.07);
+			/* Adjust label when button is pressed */
+			.action-button:active::after {
+				transform: translate(-50%, -50%) rotate(25deg) translateY(1px);
 			}
 
-			/* Action button states */
-			.action-button:active {
-				transform: scale(0.98) translateZ(0);
-				opacity: 0.9;
-				background-image: linear-gradient(
-					145deg,
-					rgba(0, 0, 0, 0.1) 0%,
-					rgba(0, 0, 0, 0.05) 30%,
-					rgba(0, 0, 0, 0.1) 50%,
-					rgba(0, 0, 0, 0.15) 100%
-				);
-				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 0 2px 4px rgba(0, 0, 0, 0.4),
-					inset 0 2px 5px rgba(0, 0, 0, 1);
+			/* Show gamepad only on mobile */
+			@media (max-width: 768px) {
+				.touch-device .gamepad-row {
+					display: flex;
+					order: -1;
+				}
+
+				.control-panel {
+					padding-top: 12px;
+				}
 			}
 
 			/* Desktop styles */
@@ -1248,7 +1125,7 @@
 							<div class="dpad-button" data-direction="left"></div>
 							<div class="dpad-button" data-direction="down"></div>
 							<div class="dpad-button" data-direction="right"></div>
-							<div class="dpad"></div>
+							<div class="dpad"><div class="dpad-middle"></div></div>
 						</div>
 						<div class="power-group-mobile">
 							<div class="power-led"></div>
@@ -1256,8 +1133,14 @@
 						</div>
 						<div class="action-buttons-container">
 							<div class="action-buttons">
-								<div class="action-button" data-action="b">B</div>
-								<div class="action-button" data-action="a">A</div>
+								<div class="action-button-wrapper">
+									<div class="action-button-hitbox" data-action="b"></div>
+									<div class="action-button" data-action="b"></div>
+								</div>
+								<div class="action-button-wrapper">
+									<div class="action-button-hitbox" data-action="a"></div>
+									<div class="action-button" data-action="a"></div>
+								</div>
 							</div>
 						</div>
 					</div>
@@ -1461,12 +1344,12 @@
 
 				// Add gamepad button sounds
 				document
-					.querySelectorAll('.dpad-button, .action-button')
+					.querySelectorAll('.dpad-button, .action-button-hitbox')
 					.forEach((button) => {
 						// Play gamepad button sound
 						const playButtonSound = (e) => {
 							e.preventDefault() // Prevent default to avoid double triggers
-							const buttonSound = new Audio('audio/click.mp3')
+							const buttonSound = new Audio('audio/action-tap.mp3')
 							buttonSound.play()
 						}
 
@@ -1482,7 +1365,7 @@
 
 				// Handle D-pad and action buttons
 				const dpadButtons = document.querySelectorAll('.dpad-button')
-				const actionButtons = document.querySelectorAll('.action-button')
+				const actionButtons = document.querySelectorAll('.action-button-hitbox')
 
 				// Map touch events for D-pad buttons
 				dpadButtons.forEach((button) => {
