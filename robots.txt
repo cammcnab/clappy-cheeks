@@ -1,33 +1,33 @@
-# Disallow all robots from accessing the site
+# Allow all robots from accessing the site
 User-agent: *
-Disallow: /
+Allow: /
 
-# Explicitly disallow major search engine bots
+# Allow major search engine bots
 User-agent: Googlebot
-Disallow: /
+Allow: /
 
 User-agent: Bingbot
-Disallow: /
+Allow: /
 
 User-agent: Slurp
-Disallow: /
+Allow: /
 
 User-agent: DuckDuckBot
-Disallow: /
+Allow: /
 
 User-agent: Baiduspider
-Disallow: /
+Allow: /
 
 User-agent: YandexBot
-Disallow: /
+Allow: /
 
-# Prevent media indexing
+# Allow media indexing
 User-agent: Googlebot-Image
-Disallow: /
+Allow: /
 
 User-agent: Googlebot-Video
-Disallow: /
+Allow: /
 
-# Prevent archive.org from archiving the site
+# Allow archive.org to archive the site
 User-agent: archive.org_bot
-Disallow: / 
+Allow: / 
