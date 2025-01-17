@@ -945,22 +945,14 @@
 					/* Drop shadow */ 0 3px 6px rgba(0, 0, 0, 0.5),
 					/* Inner shadow */ inset 0 2px 4px rgba(0, 0, 0, 0.9),
 					/* Subtle rim light */ inset 0 1px 1px rgba(255, 255, 255, 0.07);
+				transition: transform 0.08s ease-out;
+				transform: translateZ(0);
+				will-change: transform;
 			}
 
 			.action-button:active {
-				transform: scale(0.98);
-				filter: brightness(0.9);
-				background-image: linear-gradient(
-					145deg,
-					rgba(0, 0, 0, 0.1) 0%,
-					rgba(0, 0, 0, 0.05) 30%,
-					rgba(0, 0, 0, 0.1) 50%,
-					rgba(0, 0, 0, 0.15) 100%
-				);
-				box-shadow:
-					/* Maintain edge */ 0 1px 2px rgba(0, 0, 0, 0.6),
-					/* Pressed drop shadow */ 0 2px 4px rgba(0, 0, 0, 0.4),
-					/* Deeper inner shadow */ inset 0 2px 5px rgba(0, 0, 0, 1);
+				transform: scale(0.98) translateZ(0);
+				opacity: 0.9;
 			}
 
 			/* Show gamepad only on mobile */
@@ -1154,8 +1146,8 @@
 
 			/* Action button states */
 			.action-button:active {
-				transform: scale(0.98);
-				filter: brightness(0.9);
+				transform: scale(0.98) translateZ(0);
+				opacity: 0.9;
 				background-image: linear-gradient(
 					145deg,
 					rgba(0, 0, 0, 0.1) 0%,
@@ -1526,59 +1518,35 @@
 				actionButtons.forEach((button) => {
 					const action = button.dataset.action
 
-					// Create handler that checks Konami state before triggering game input
+					// Use single pointer event instead of multiple listeners
 					const handlePress = (e) => {
-						e.preventDefault()
-						e.stopPropagation()
+						// Skip preventDefault unless needed for specific cases
+						if (e.type === 'touchstart') {
+							e.preventDefault()
+						}
 
-						// Check if we're waiting for B/A input for Konami code
-						if (window.konamiState && window.konamiState.isWaitingForAB()) {
-							// Check if this button press is the next expected Konami code input
+						// Fast path for normal game input
+						if (
+							!window.konamiState ||
+							(!window.konamiState.isWaitingForAB() &&
+								!window.konamiState.isCompletingKonami())
+						) {
+							window.game?.handleInput()
+							return
+						}
+
+						// Konami code handling only if needed
+						if (window.konamiState.isWaitingForAB()) {
 							const nextExpectedInput =
 								window.konamiState.code[window.konamiState.getIndex()]
-							const isNextKonamiInput =
-								nextExpectedInput.toLowerCase() === action.toLowerCase()
-
-							console.log('BA Check:', {
-								action,
-								nextExpected: nextExpectedInput,
-								isNext: isNextKonamiInput,
-								index: window.konamiState.getIndex(),
-							})
-
-							// Handle the input if it's correct
-							if (isNextKonamiInput) {
+							if (nextExpectedInput.toLowerCase() === action.toLowerCase()) {
 								window.konamiState.handleInput(action.toLowerCase())
 							}
-
-							// Always return during BA sequence, regardless of correct/incorrect input
-							return
-						}
-
-						// Don't allow game input during completion
-						if (window.konamiState && window.konamiState.isCompletingKonami()) {
-							return
-						}
-
-						// Normal game input if not in Konami sequence
-						if (window.game && window.game.handleInput) {
-							window.game.handleInput()
 						}
 					}
 
-					// Remove any existing listeners
-					button.removeEventListener('pointerdown', handlePress)
-					button.removeEventListener('touchstart', handlePress)
-					button.removeEventListener('mousedown', handlePress)
-
-					// Add listeners for both touch and click
-					button.addEventListener('pointerdown', handlePress, {
-						passive: false,
-					})
-					button.addEventListener('touchstart', handlePress, { passive: false })
-					button.addEventListener('mousedown', handlePress)
-
-					console.log('Handler attached to button:', action)
+					// Use only pointerdown with passive true where possible
+					button.addEventListener('pointerdown', handlePress, { passive: true })
 				})
 
 				const b = document.getElementById('shareButton')
