@@ -4,10 +4,15 @@
 		<meta charset="UTF-8" />
 		<meta
 			name="viewport"
-			content="user-scalable=no,initial-scale=1,maximum-scale=1,minimum-scale=1,width=device-width"
+			content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover"
 		/>
 		<meta name="robots" content="noindex, nofollow" />
 		<meta name="googlebot" content="noindex, nofollow" />
+		<meta name="screen-orientation" content="portrait" />
+		<meta name="orientation" content="portrait" />
+		<meta http-equiv="ScreenOrientation" content="autoLock:portrait" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black" />
 		<title>Clappy Cheeks!!</title>
 		<link
 			href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
@@ -34,6 +39,25 @@
 				box-sizing: border-box;
 				margin: 0;
 				padding: 0;
+			}
+
+			/* Lock orientation for mobile phones */
+			@media screen and (max-width: 742px) and (orientation: landscape) {
+				html {
+					transform: rotate(-90deg);
+					transform-origin: left top;
+					width: 100vh;
+					height: 100vw;
+					overflow-x: hidden;
+					position: absolute;
+					top: 100%;
+					left: 0;
+				}
+				body {
+					transform-origin: left top;
+					width: 100vh;
+					height: 100vw;
+				}
 			}
 
 			/* Common properties for fixed positioning */
@@ -1847,6 +1871,53 @@
 							'content',
 							'width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover'
 						)
+					}
+				})
+			})
+		</script>
+
+		<!-- Portrait mode -->
+		<script>
+			window.addEventListener('load', function () {
+				// Lock to portrait orientation
+				if (screen.orientation && screen.orientation.lock) {
+					screen.orientation.lock('portrait').catch(function (error) {
+						console.log('Orientation lock failed:', error)
+					})
+				}
+
+				// iOS-specific orientation lock using fullscreen API
+				if (document.documentElement.requestFullscreen) {
+					document.documentElement
+						.requestFullscreen()
+						.then(() => {
+							if (screen.orientation && screen.orientation.lock) {
+								return screen.orientation.lock('portrait')
+							}
+						})
+						.catch(function (error) {
+							console.log('Fullscreen/orientation lock failed:', error)
+						})
+				}
+
+				// Force portrait on orientation change
+				window.addEventListener('orientationchange', function () {
+					if (window.orientation === 90 || window.orientation === -90) {
+						// Force portrait mode when device is in landscape
+						document.documentElement.style.transform = 'rotate(-90deg)'
+						document.documentElement.style.transformOrigin = 'left top'
+						document.documentElement.style.width = '100vh'
+						document.documentElement.style.height = '100vw'
+						document.documentElement.style.position = 'absolute'
+						document.documentElement.style.top = '100%'
+					} else {
+						// Reset transforms when in portrait
+						document.documentElement.style.transform = ''
+						document.documentElement.style.transformOrigin = ''
+						document.documentElement.style.width = ''
+						document.documentElement.style.height = ''
+						document.documentElement.style.position = ''
+						document.documentElement.style.top = ''
 					}
 				})
 			})
