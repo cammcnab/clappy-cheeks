@@ -16,6 +16,16 @@ const isMobile = (function () {
 	return check
 })()
 
+// Detect Safari desktop specifically
+const isDesktopSafari = (function () {
+	const ua = navigator.userAgent
+	return (
+		!isMobile &&
+		/^((?!chrome|android).)*safari/i.test(ua) &&
+		/Macintosh|Mac OS X/i.test(ua)
+	)
+})()
+
 // Game constants
 const MIN_LOADING_TIME = 1800 // Minimum loading time in milliseconds
 const GRAVITY = isMobile ? 0.2 : 0.4
@@ -46,6 +56,7 @@ const LAYOUT = {
 
 // Make it available globally
 window.isMobile = isMobile
+window.isDesktopSafari = isDesktopSafari
 
 // Text size scales (relative to base font size)
 const TEXT_SIZES = {
@@ -1685,7 +1696,11 @@ class Game {
 						const pressSpaceGroup = new PIXI.Container()
 						pressSpaceGroup.name = 'pressSpaceGroup'
 
-						const buttonText = isMobile ? 'TAP TO CONTINUE' : 'PRESS SPACE'
+						const buttonText = isMobile
+							? 'TAP TO CONTINUE'
+							: isDesktopSafari
+							? 'CLICK TO CONTINUE'
+							: 'PRESS SPACE'
 
 						const pressText = new PIXI.Text(buttonText, {
 							fontFamily: 'Press Start 2P',
@@ -1879,9 +1894,9 @@ class Game {
 	}
 
 	initInputHandlers() {
-		// Keyboard controls
+		// Keyboard controls - disable space bar for Safari desktop
 		window.addEventListener('keydown', (e) => {
-			if (e.code === 'Space') {
+			if (e.code === 'Space' && !isDesktopSafari) {
 				e.preventDefault()
 				this.handleInput()
 			}
@@ -2913,7 +2928,11 @@ class Game {
 			pressSpaceGroup.y = baseFontSize * LAYOUT.PRESS_SPACE_OFFSET
 
 			// Create press space text
-			const buttonText = isMobile ? 'TAP TO START' : 'PRESS SPACE'
+			const buttonText = isMobile
+				? 'TAP TO START'
+				: isDesktopSafari
+				? 'CLICK TO START'
+				: 'PRESS SPACE'
 
 			const pressText = new PIXI.Text(buttonText, {
 				fontFamily: 'Press Start 2P',
