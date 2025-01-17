@@ -1752,25 +1752,11 @@
 		<!-- Portrait mode -->
 		<script>
 			window.addEventListener('load', function () {
-				// Lock to portrait orientation
+				// Try to lock orientation if supported
 				if (screen.orientation && screen.orientation.lock) {
 					screen.orientation.lock('portrait').catch(function (error) {
 						console.log('Orientation lock failed:', error)
 					})
-				}
-
-				// iOS-specific orientation lock using fullscreen API
-				if (document.documentElement.requestFullscreen) {
-					document.documentElement
-						.requestFullscreen()
-						.then(() => {
-							if (screen.orientation && screen.orientation.lock) {
-								return screen.orientation.lock('portrait')
-							}
-						})
-						.catch(function (error) {
-							console.log('Fullscreen/orientation lock failed:', error)
-						})
 				}
 
 				// Force portrait on orientation change
