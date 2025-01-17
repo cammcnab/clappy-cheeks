@@ -2123,6 +2123,9 @@ class Game {
 		// Randomize the gap size relative to screen height
 		GLOVE_OPENING = MIN_GAP + Math.random() * (MAX_GAP - MIN_GAP)
 
+		// Get cached arm texture
+		let armTexture = PIXI.Assets.get('arm')
+
 		// Calculate gap position - between 30% and 70% of screen height
 		const minY = height * 0.3
 		const maxY = height * 0.7
@@ -2136,56 +2139,50 @@ class Game {
 			pair.x = width * SPAWN_OFFSET
 		} else {
 			const lastPair = this.gloves.pairs[this.gloves.pairs.length - 1]
-			pair.x = lastPair.x + width * GLOVE_SET_GAP // GLOVE_SET_GAP is now an absolute value
+			pair.x = lastPair.x + width * GLOVE_SET_GAP
 		}
 
 		pair.gapY = gapCenter
 		pair.passed = false
 
-		// Get cached arm texture
-		let armTexture = PIXI.Assets.get('arm')
-
 		// If no valid texture, create fallback shapes
 		if (!armTexture || !armTexture.valid) {
 			console.warn('Using fallback shapes for gloves')
-			const armHeight = ARM_SCALE * 4
 
 			const topGlove = new PIXI.Graphics()
 			topGlove.beginFill(0xff0000)
-			topGlove.drawRect(-ARM_SCALE / 2, 0, ARM_SCALE, armHeight)
+			topGlove.drawRect(-ARM_SCALE / 2, 0, ARM_SCALE, height * 0.6)
 			topGlove.endFill()
-			topGlove.y = gapCenter - GLOVE_OPENING / 2
+			topGlove.y = gapCenter - GLOVE_OPENING / 2 - height * 0.6 // Position from top edge
 
 			const bottomGlove = new PIXI.Graphics()
 			bottomGlove.beginFill(0xff0000)
-			bottomGlove.drawRect(-ARM_SCALE / 2, 0, ARM_SCALE, armHeight)
+			bottomGlove.drawRect(-ARM_SCALE / 2, 0, ARM_SCALE, height * 0.6)
 			bottomGlove.endFill()
-			bottomGlove.y = gapCenter + GLOVE_OPENING / 2
+			bottomGlove.y = gapCenter + GLOVE_OPENING / 2 // Position from bottom edge
 
 			pair.addChild(topGlove, bottomGlove)
 		} else {
-			// Calculate dimensions
-			const targetWidth = ARM_SCALE
-			const naturalRatio = armTexture.height / armTexture.width
-			const armHeight = targetWidth * naturalRatio
+			// Calculate scale based on screen height to ensure gloves reach edges
+			// Make gloves larger to ensure they reach edges even on tall screens
+			const desiredHeight = height * 0.6 // Increased for larger gloves
+			const scale = desiredHeight / armTexture.height
+			const adjustedWidth = armTexture.width * scale
 
 			// Create top glove
 			const topGlove = new PIXI.Sprite(armTexture)
-			topGlove.anchor.set(0.5, 0)
+			topGlove.anchor.set(0.5, 0) // Set anchor to top center
 			topGlove.x = 0
-			topGlove.y = 0
 			topGlove.angle = 180
-			topGlove.width = targetWidth
-			topGlove.scale.y = topGlove.scale.x
-			topGlove.position.y = gapCenter - GLOVE_OPENING / 2
+			topGlove.scale.set(scale)
+			topGlove.y = gapCenter - GLOVE_OPENING / 2 // Position at gap edge
 
 			// Create bottom glove
 			const bottomGlove = new PIXI.Sprite(armTexture)
-			bottomGlove.anchor.set(0.5, 0)
+			bottomGlove.anchor.set(0.5, 0) // Set anchor to top center
 			bottomGlove.x = 0
-			bottomGlove.y = gapCenter + GLOVE_OPENING / 2
-			bottomGlove.width = targetWidth
-			bottomGlove.scale.y = bottomGlove.scale.x
+			bottomGlove.y = gapCenter + GLOVE_OPENING / 2 // Position at gap edge
+			bottomGlove.scale.set(scale)
 
 			pair.addChild(topGlove, bottomGlove)
 		}
