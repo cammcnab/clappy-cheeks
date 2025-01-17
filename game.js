@@ -1514,6 +1514,16 @@ class Game {
 			align: 'center',
 		})
 
+		// Dispatch gameEnd event for final knockout
+		const gameEndEvent = new CustomEvent('gameEnd', {
+			detail: {
+				score: finalScore,
+				isGameOver: true,
+				roundsLeft: gameState.roundsLeft,
+			},
+		})
+		window.dispatchEvent(gameEndEvent)
+
 		if (scoreText) {
 			// Create score container group
 			const scoreContainer = new PIXI.Container()
@@ -2276,6 +2286,16 @@ class Game {
 			gameState.knockoutTime = performance.now()
 			gameState.roundsLeft--
 			this.updateHUD()
+
+			// Dispatch gameEnd event
+			const gameEndEvent = new CustomEvent('gameEnd', {
+				detail: {
+					score: gameState.totalScore + gameState.score,
+					isGameOver: true,
+					roundsLeft: gameState.roundsLeft,
+				},
+			})
+			window.dispatchEvent(gameEndEvent)
 		}
 	}
 
