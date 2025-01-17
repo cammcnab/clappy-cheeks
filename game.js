@@ -1,16 +1,3 @@
-// Game constants
-const GRAVITY = 0.12
-const CLAP_SPEED = -4.0 // This is how fast the cheeks move upward when the player taps/clicks - negative means up
-const GLOVE_SET_GAP = 0.5
-const SPAWN_OFFSET = 1.05
-const PLAYER_X = 0.45
-const GLOVE_SPEED = 2.5
-const KNOCKOUT_DELAY = 1500
-const SPEED_INCREASE = 0.08
-const MAX_SPEED = 2
-const SQUISH_DURATION = 100
-const MIN_LOADING_TIME = 1800 // Minimum loading time in milliseconds
-
 // Global mobile check - using more comprehensive detection
 const isMobile = (function () {
 	// First check for common mobile indicators
@@ -28,6 +15,19 @@ const isMobile = (function () {
 
 	return check
 })()
+
+// Game constants
+const MIN_LOADING_TIME = 1800 // Minimum loading time in milliseconds
+const GRAVITY = isMobile ? 0.12 : 0.3
+const CLAP_SPEED = isMobile ? -3.5 : -5.0 // This is how fast the cheeks move upward when the player taps/clicks - negative means up
+let GLOVE_SET_GAP = isMobile ? 0.8 : 0.6
+const SPAWN_OFFSET = 1.1
+const PLAYER_X = 0.45
+const GLOVE_SPEED = 8
+const SPEED_INCREASE = 0.1
+const MAX_SPEED = 16
+const KNOCKOUT_DELAY = 1500
+const SQUISH_DURATION = 100
 
 // Layout constants (relative to base font size)
 const LAYOUT = {
@@ -68,7 +68,6 @@ const getBaseFontSize = (width, height, options = {}) => {
 window.getBaseFontSize = getBaseFontSize
 
 // Screen-relative constants (these will be calculated in the Game class)
-let GLOVE_WIDTH
 let GLOVE_OPENING
 let MIN_GAP
 let MAX_GAP
@@ -492,13 +491,27 @@ class Game {
 
 	updateScreenConstants() {
 		const height = this.screenHeight
-		// Update global constants based on screen height
-		GLOVE_WIDTH = height * 0.12
-		MIN_GAP = height * 0.3
-		MAX_GAP = height * 0.45
+		const width = this.screenWidth
+		// Add maximum height caps
+		const maxHeight = Math.min(height, width * 1.5)
+
+		// Reference width for consistent spacing
+		const REFERENCE_WIDTH = 1920
+		const baseSpacing = GLOVE_SET_GAP * REFERENCE_WIDTH // Use the constant defined at top
+
+		// Update global constants based on capped height
+		MIN_GAP = Math.min(maxHeight * 0.3, height * 0.3)
+		MAX_GAP = Math.min(maxHeight * 0.45, height * 0.4)
 		GLOVE_OPENING = MIN_GAP + Math.random() * (MAX_GAP - MIN_GAP)
-		CHEEKS_SIZE = height * (isMobile ? 0.16 : 0.18)
-		ARM_SCALE = height * (isMobile ? 0.1 : 0.12)
+		CHEEKS_SIZE = maxHeight * (isMobile ? 0.16 : 0.18)
+		ARM_SCALE = Math.min(
+			maxHeight * (isMobile ? 0.15 : 0.13),
+			width * (isMobile ? 0.14 : 0.1)
+		)
+
+		// Convert GLOVE_SET_GAP to absolute pixels based on the original relative value
+		const absoluteSpacing = baseSpacing * (width / REFERENCE_WIDTH)
+		GLOVE_SET_GAP = absoluteSpacing / width // Convert back to relative for existing spawn logic
 	}
 
 	handleResize() {
@@ -2108,12 +2121,12 @@ class Game {
 		// Create glove pair container
 		const pair = new PIXI.Container()
 
-		// Position the pair
+		// Position the pair using absolute spacing
 		if (this.gloves.pairs.length === 0) {
 			pair.x = width * SPAWN_OFFSET
 		} else {
 			const lastPair = this.gloves.pairs[this.gloves.pairs.length - 1]
-			pair.x = lastPair.x + width * GLOVE_SET_GAP
+			pair.x = lastPair.x + width * GLOVE_SET_GAP // GLOVE_SET_GAP is now an absolute value
 		}
 
 		pair.gapY = gapCenter
