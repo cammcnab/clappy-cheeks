@@ -19,6 +19,33 @@
 		<link rel="manifest" href="/site.webmanifest" />
 		<title>Clappy Cheeks!!</title>
 
+		<!-- Prevent double tap zoom on iOS Safari -->
+		<script>
+			document.addEventListener('dblclick', (e) => {
+				e.preventDefault()
+			})
+
+			document.addEventListener('touchend', (e) => {
+				const now = Date.now()
+				const DOUBLE_TAP_THRESHOLD = 300
+				if (now - (window.lastTap || 0) < DOUBLE_TAP_THRESHOLD) {
+					e.preventDefault()
+				}
+				window.lastTap = now
+			})
+
+			// Prevent pinch zoom
+			document.addEventListener('gesturestart', (e) => {
+				e.preventDefault()
+			})
+			document.addEventListener('gesturechange', (e) => {
+				e.preventDefault()
+			})
+			document.addEventListener('gestureend', (e) => {
+				e.preventDefault()
+			})
+		</script>
+
 		<link
 			href="https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@1,700&display=swap"
 			rel="stylesheet"
@@ -28,7 +55,7 @@
 			*,
 			*::before,
 			*::after {
-				touch-action: manipulation;
+				touch-action: none; /* Disable all touch actions */
 				-webkit-touch-callout: none;
 				-webkit-user-select: none;
 				user-select: none;
@@ -36,6 +63,17 @@
 				box-sizing: border-box;
 				margin: 0;
 				padding: 0;
+			}
+
+			/* Common properties for fixed positioning */
+			html,
+			body {
+				height: 100%;
+				width: 100%;
+				overflow: hidden;
+				position: fixed;
+				touch-action: none; /* Explicitly disable touch actions on html/body */
+				-webkit-overflow-scrolling: none;
 			}
 
 			/* Lock orientation for mobile phones */
@@ -55,15 +93,6 @@
 					width: 100vh;
 					height: 100vw;
 				}
-			}
-
-			/* Common properties for fixed positioning */
-			html,
-			body {
-				height: 100%;
-				width: 100%;
-				overflow: hidden;
-				position: fixed;
 			}
 
 			/* Additional body styles */
