@@ -300,18 +300,18 @@ class Game {
 			this.crtFilter.noise = 0.05
 			this.crtFilter.noiseSize = 1.1
 			this.crtFilter.vignetting = 0.3
-			this.crtFilter.vignettingAlpha = 0.3
-			this.crtFilter.vignettingBlur = 0.4
+			this.crtFilter.vignettingAlpha = 0.2
+			this.crtFilter.vignettingBlur = 0.6
 			this.crtFilter.seed = Math.random()
 			this.crtFilter.time = 0
 
 			// Create Bloom filter with proper settings
 			this.bloomFilter = new PIXI.filters.BloomFilter()
-			this.bloomFilter.strength = 15
-			this.bloomFilter.blurX = window.isMobile ? 1 : 5
-			this.bloomFilter.blurY = window.isMobile ? 0.5 : 3
+			this.bloomFilter.strength = window.isMobile ? 10 : 15
+			this.bloomFilter.blurX = window.isMobile ? 0.4 : 5
+			this.bloomFilter.blurY = window.isMobile ? 0.2 : 3
 			this.bloomFilter.quality = 20
-			this.bloomFilter.kernelSize = 9
+			this.bloomFilter.kernelSize = window.isMobile ? 6 : 9
 
 			// Apply filters to the root stage to affect all UI elements
 			this.app.stage.filters = [this.bloomFilter, this.crtFilter]
